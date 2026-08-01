@@ -168,6 +168,8 @@ export default function AdminDashboard() {
                 { label: 'Overview', href: '/admin' },
                 { label: 'Visitors', href: '/admin/visitors' },
                 { label: 'Members', href: '/admin/members' },
+                { label: 'Campaigns', href: '/admin/campaigns' },
+                { label: 'Analytics', href: '/admin/analytics' },
               ].map((link) => (
                 <a
                   key={link.href}
@@ -210,7 +212,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Quick links */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <a href="/admin/visitors" className="card flex items-center gap-4 hover:border-brand-blue/40 transition-colors cursor-pointer">
             <div className="w-10 h-10 bg-brand-blue/20 rounded-xl flex items-center justify-center flex-shrink-0">
               <svg className="w-5 h-5 text-brand-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -231,6 +233,28 @@ export default function AdminDashboard() {
             <div>
               <p className="text-white font-medium text-sm">Member Management</p>
               <p className="text-gray-500 text-xs">Add, edit, and manage member accounts</p>
+            </div>
+          </a>
+          <a href="/admin/campaigns" className="card flex items-center gap-4 hover:border-purple-500/40 transition-colors cursor-pointer">
+            <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-medium text-sm">Campaigns</p>
+              <p className="text-gray-500 text-xs">Send bulk SMS & email to segments</p>
+            </div>
+          </a>
+          <a href="/admin/analytics" className="card flex items-center gap-4 hover:border-green-500/40 transition-colors cursor-pointer">
+            <div className="w-10 h-10 bg-green-500/20 rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-medium text-sm">Analytics</p>
+              <p className="text-gray-500 text-xs">Pipeline, conversion rate & top inviters</p>
             </div>
           </a>
         </div>

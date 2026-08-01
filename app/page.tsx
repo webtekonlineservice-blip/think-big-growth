@@ -1,5 +1,64 @@
 import Link from 'next/link'
 
+async function getCategories() {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const res = await fetch(`${baseUrl}/api/categories`, { next: { revalidate: 300 } })
+    if (!res.ok) return { openCategories: [] as string[] }
+    return res.json() as Promise<{ openCategories: string[] }>
+  } catch {
+    return { openCategories: [] as string[] }
+  }
+}
+
+async function OpenCategories() {
+  const { openCategories } = await getCategories()
+
+  if (!openCategories.length) return null
+
+  // Show a representative sample of open categories
+  const display = openCategories.slice(0, 18)
+
+  return (
+    <section className="px-6 py-16 border-t border-gray-800">
+      <div className="max-w-4xl mx-auto">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 bg-green-500/20 border border-green-500/30 text-green-400 px-4 py-1.5 rounded-full text-sm font-medium mb-4">
+            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+            {openCategories.length} seats available
+          </div>
+          <h2 className="text-3xl font-bold text-white mb-3">Open Professions</h2>
+          <p className="text-gray-400 max-w-xl mx-auto text-sm">
+            BNI allows one member per profession. These categories are currently open at Think Big St. Louis — is yours available?
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2 justify-center mb-8">
+          {display.map((cat) => (
+            <span
+              key={cat}
+              className="px-3 py-1.5 bg-gray-800 border border-gray-700 text-gray-300 rounded-full text-sm hover:border-green-500/40 hover:text-green-400 transition-colors"
+            >
+              {cat}
+            </span>
+          ))}
+          {openCategories.length > 18 && (
+            <span className="px-3 py-1.5 bg-gray-700/50 border border-gray-700 text-gray-500 rounded-full text-sm">
+              +{openCategories.length - 18} more
+            </span>
+          )}
+        </div>
+
+        <div className="text-center">
+          <Link href="/join" className="btn-primary text-sm px-6 py-3">
+            Claim Your Seat →
+          </Link>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
@@ -176,6 +235,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* Open categories section */}
+      <OpenCategories />
 
       {/* CTA */}
       <section className="px-6 py-16 border-t border-gray-800">
