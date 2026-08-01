@@ -1,11 +1,5 @@
 import mongoose from 'mongoose'
 
-const MONGODB_URI = process.env.MONGODB_URI
-
-if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable in .env.local')
-}
-
 /**
  * Global cache prevents multiple Mongoose connections during hot-reload in dev.
  * In production each serverless function invocation reuses the cached promise.
@@ -19,10 +13,15 @@ const cached = globalThis._mongooseCache ?? { conn: null, promise: null }
 globalThis._mongooseCache = cached
 
 export async function connectDB(): Promise<typeof mongoose> {
+  const MONGODB_URI = process.env.MONGODB_URI
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI environment variable is not set.')
+  }
+
   if (cached.conn) return cached.conn
 
   if (!cached.promise) {
-    cached.promise = mongoose.connect(MONGODB_URI as string, {
+    cached.promise = mongoose.connect(MONGODB_URI, {
       bufferCommands: false,
     })
   }

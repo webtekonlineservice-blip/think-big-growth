@@ -2,9 +2,6 @@ import jwt from 'jsonwebtoken'
 import { cookies } from 'next/headers'
 import { NextRequest } from 'next/server'
 
-const JWT_SECRET = process.env.JWT_SECRET
-if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is not set.')
-
 const COOKIE_NAME = 'tbg_session'
 const MAX_AGE = 60 * 60 * 24 * 7 // 7 days
 
@@ -16,15 +13,21 @@ export interface SessionPayload {
   invite_code: string
 }
 
+function getSecret(): string {
+  const secret = process.env.JWT_SECRET
+  if (!secret) throw new Error('JWT_SECRET environment variable is not set.')
+  return secret
+}
+
 /** Sign a JWT and return it as a string. */
 export function signToken(payload: SessionPayload): string {
-  return jwt.sign(payload, JWT_SECRET as string, { expiresIn: MAX_AGE })
+  return jwt.sign(payload, getSecret(), { expiresIn: MAX_AGE })
 }
 
 /** Verify a JWT string. Returns the payload or null if invalid/expired. */
 export function verifyToken(token: string): SessionPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET as string) as SessionPayload
+    return jwt.verify(token, getSecret()) as SessionPayload
   } catch {
     return null
   }
