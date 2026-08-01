@@ -3,8 +3,6 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { signInWithEmailAndPassword } from 'firebase/auth'
-import { getFirebaseAuth } from '@/lib/firebase'
 
 export default function MemberLoginPage() {
   const router = useRouter()
@@ -19,18 +17,22 @@ export default function MemberLoginPage() {
     setError('')
 
     try {
-      const auth = getFirebaseAuth()
-      await signInWithEmailAndPassword(auth, email, password)
-      router.push('/member')
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code
-      if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
-        setError('Invalid email or password.')
-      } else if (code === 'auth/too-many-requests') {
-        setError('Too many failed attempts. Please try again later.')
-      } else {
-        setError('Login failed. Please try again.')
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error ?? 'Login failed. Please try again.')
+        return
       }
+
+      router.push('/member')
+    } catch {
+      setError('Login failed. Please try again.')
     } finally {
       setLoading(false)
     }

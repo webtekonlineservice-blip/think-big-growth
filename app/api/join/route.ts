@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFirestore } from '@/lib/firebaseAdmin'
+import { connectDB } from '@/lib/mongodb'
+import Member from '@/lib/models/Member'
+import Visitor from '@/lib/models/Visitor'
+import Invite from '@/lib/models/Invite'
+import OutreachLog from '@/lib/models/OutreachLog'
 import { sendSms } from '@/lib/twilio'
-import { FieldValue } from 'firebase-admin/firestore'
+import { sendWelcomeEmail } from '@/lib/resend'
 
 interface JoinPayload {
   firstName: string
@@ -28,6 +32,7 @@ export async function POST(req: NextRequest) {
       'businessType',
       'referralSource',
     ]
+
     for (const field of required) {
       if (!body[field]?.trim()) {
         return NextResponse.json(
@@ -37,7 +42,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const db = getAdminFirestore()
+    await connectDB()
 
     // Resolve inviting member from ref code
     let invitedById: string | null = null
@@ -45,23 +50,16 @@ export async function POST(req: NextRequest) {
     let invitingMemberName: string | null = null
 
     if (body.refCode) {
-      const memberQuery = await db
-        .collection('members')
-        .where('invite_code', '==', body.refCode)
-        .limit(1)
-        .get()
-
-      if (!memberQuery.empty) {
-        const memberDoc = memberQuery.docs[0]
-        invitedById = memberDoc.id
-        invitingMemberPhone = memberDoc.data().phone ?? null
-        invitingMemberName = memberDoc.data().name ?? null
+      const member = await Member.findOne({ invite_code: body.refCode }).lean()
+      if (member) {
+        invitedById = member._id.toString()
+        invitingMemberPhone = member.phone ?? null
+        invitingMemberName = member.name ?? null
       }
     }
 
     // Create visitor document
-    const visitorRef = db.collection('visitors').doc()
-    const visitorData = {
+    const visitor = await Visitor.create({
       first_name: body.firstName!.trim(),
       last_name: body.lastName!.trim(),
       email: body.email!.trim().toLowerCase(),
@@ -73,51 +71,90 @@ export async function POST(req: NextRequest) {
       status: 'invited',
       visit_date: null,
       notes: '',
-      created_at: FieldValue.serverTimestamp(),
-    }
-    await visitorRef.set(visitorData)
+    })
+
+    const visitorId = visitor._id.toString()
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thinkbig.webtek.ai'
 
     // Record invite link usage
     if (invitedById && body.refCode) {
-      await db.collection('invites').add({
+      await Invite.create({
         member_id: invitedById,
+        visitor_id: visitorId,
         invite_code: body.refCode,
-        visitor_id: visitorRef.id,
-        created_at: FieldValue.serverTimestamp(),
       })
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thinkbig.webtek.ai'
-
-    // Send welcome SMS to visitor
+    // ── Welcome SMS to visitor ───────────────────────────────────────────────
     try {
       await sendSms(
         body.phone!,
-        `Hi ${body.firstName}, you're registered to visit Think Big St. Louis BNI! ` +
+        `Hi ${body.firstName}! You're registered to visit Think Big St. Louis BNI. ` +
           `We meet every Thursday at 11:30 AM at Mike Duffy's Pub & Grill in Kirkwood, MO. ` +
           `See you there! — Think Big St. Louis`
       )
-    } catch (smsErr) {
-      console.error('Failed to send welcome SMS to visitor:', smsErr)
-      // Non-fatal — visitor is still saved
+      await OutreachLog.create({
+        visitor_id: visitorId,
+        step: 'welcome_sms',
+        channel: 'sms',
+        to: body.phone!,
+        status: 'sent',
+      })
+    } catch (err) {
+      console.error('Welcome SMS failed:', err)
+      await OutreachLog.create({
+        visitor_id: visitorId,
+        step: 'welcome_sms',
+        channel: 'sms',
+        to: body.phone!,
+        status: 'failed',
+        error: String(err),
+      }).catch(() => {})
     }
 
-    // Notify inviting member
+    // ── Welcome email to visitor ─────────────────────────────────────────────
+    try {
+      await sendWelcomeEmail({
+        to: body.email!,
+        firstName: body.firstName!,
+        invitedByName: invitingMemberName,
+      })
+      await OutreachLog.create({
+        visitor_id: visitorId,
+        step: 'welcome_email',
+        channel: 'email',
+        to: body.email!,
+        status: 'sent',
+      })
+    } catch (err) {
+      console.error('Welcome email failed:', err)
+      await OutreachLog.create({
+        visitor_id: visitorId,
+        step: 'welcome_email',
+        channel: 'email',
+        to: body.email!,
+        status: 'failed',
+        error: String(err),
+      }).catch(() => {})
+    }
+
+    // ── Notify inviting member via SMS ───────────────────────────────────────
     if (invitingMemberPhone && invitingMemberName) {
       try {
         await sendSms(
           invitingMemberPhone,
-          `Hi ${invitingMemberName}! ${body.firstName} ${body.lastName} from ${body.company} just registered to visit Think Big St. Louis using your invite link. ` +
+          `Hi ${invitingMemberName}! ${body.firstName} ${body.lastName} from ${body.company} ` +
+            `just registered to visit Think Big St. Louis using your invite link. ` +
             `Track their status at ${appUrl}/member`
         )
-      } catch (smsErr) {
-        console.error('Failed to send notification SMS to member:', smsErr)
+      } catch (err) {
+        console.error('Member notification SMS failed:', err)
       }
     }
 
-    return NextResponse.json({ success: true, id: visitorRef.id }, { status: 201 })
+    return NextResponse.json({ success: true, id: visitorId }, { status: 201 })
   } catch (err) {
-    console.error('Error in /api/join:', err)
+    console.error('POST /api/join error:', err)
     return NextResponse.json(
       { error: 'Internal server error. Please try again.' },
       { status: 500 }

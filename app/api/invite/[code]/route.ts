@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFirestore } from '@/lib/firebaseAdmin'
+import { connectDB } from '@/lib/mongodb'
+import Member from '@/lib/models/Member'
 
 interface Params {
   params: { code: string }
@@ -13,18 +14,15 @@ export async function GET(_req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'Invalid invite code.' }, { status: 400 })
     }
 
-    const db = getAdminFirestore()
-    const query = await db
-      .collection('members')
-      .where('invite_code', '==', code.trim())
-      .limit(1)
-      .get()
+    await connectDB()
 
-    if (query.empty) {
+    const member = await Member.findOne({ invite_code: code.trim() })
+      .select('name company role')
+      .lean()
+
+    if (!member) {
       return NextResponse.json({ error: 'Invite code not found.' }, { status: 404 })
     }
-
-    const member = query.docs[0].data()
 
     return NextResponse.json(
       {
@@ -40,7 +38,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
       }
     )
   } catch (err) {
-    console.error('Error in /api/invite/[code]:', err)
+    console.error('GET /api/invite/[code] error:', err)
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
   }
 }

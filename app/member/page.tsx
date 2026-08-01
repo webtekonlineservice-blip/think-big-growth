@@ -2,8 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { onAuthStateChanged, signOut, User } from 'firebase/auth'
-import { getFirebaseAuth } from '@/lib/firebase'
+
+interface SessionUser {
+  id: string
+  email: string
+  name: string
+  is_admin: boolean
+  invite_code: string
+}
 
 interface Visitor {
   id: string
@@ -29,7 +35,7 @@ const STATUS_STYLES: Record<Visitor['status'], string> = {
 
 export default function MemberDashboard() {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<SessionUser | null>(null)
   const [profile, setProfile] = useState<MemberProfile | null>(null)
   const [visitors, setVisitors] = useState<Visitor[]>([])
   const [loading, setLoading] = useState(true)
@@ -59,16 +65,20 @@ export default function MemberDashboard() {
   }, [])
 
   useEffect(() => {
-    const auth = getFirebaseAuth()
-    const unsub = onAuthStateChanged(auth, (u) => {
-      if (!u) {
+    fetch('/api/auth/me')
+      .then(async (res) => {
+        if (!res.ok) {
+          router.push('/member/login')
+          return
+        }
+        const { user: sessionUser } = await res.json() as { user: SessionUser }
+        setUser(sessionUser)
+        await fetchMemberData(sessionUser.id)
+      })
+      .catch(() => {
         router.push('/member/login')
-        return
-      }
-      setUser(u)
-      fetchMemberData(u.uid).finally(() => setLoading(false))
-    })
-    return unsub
+      })
+      .finally(() => setLoading(false))
   }, [router, fetchMemberData])
 
   const handleCopy = async () => {
@@ -90,8 +100,7 @@ export default function MemberDashboard() {
   }
 
   const handleSignOut = async () => {
-    const auth = getFirebaseAuth()
-    await signOut(auth)
+    await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/')
   }
 
@@ -113,7 +122,7 @@ export default function MemberDashboard() {
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-white">
-              {profile?.name ?? user?.email}
+              {profile?.name ?? user?.name ?? user?.email}
             </h1>
             <p className="text-xs text-gray-500">Member Dashboard · Think Big St. Louis</p>
           </div>

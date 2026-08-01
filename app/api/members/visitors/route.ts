@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
 import Visitor from '@/lib/models/Visitor'
 import { getSession } from '@/lib/auth'
+import mongoose from 'mongoose'
 
 /**
- * GET /api/visitors
- * Admin-only: returns all visitors ordered by created_at desc.
+ * GET /api/members/visitors?uid=<memberId>
+ * Returns all visitors invited by the given member.
+ * Members can only see their own visitors; admins can see any.
  */
 export async function GET(req: NextRequest) {
   const session = getSession(req)
@@ -14,37 +16,39 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
   }
 
-  if (!session.is_admin) {
-    return NextResponse.json({ error: 'Forbidden. Admin access required.' }, { status: 403 })
+  const uid = req.nextUrl.searchParams.get('uid')
+
+  if (!uid) {
+    return NextResponse.json({ error: 'uid query parameter is required.' }, { status: 400 })
+  }
+
+  if (!session.is_admin && session.id !== uid) {
+    return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
+  }
+
+  if (!mongoose.isValidObjectId(uid)) {
+    return NextResponse.json({ error: 'Invalid member id.' }, { status: 400 })
   }
 
   try {
     await connectDB()
 
-    const visitors = await Visitor.find()
+    const visitors = await Visitor.find({ invited_by: uid })
       .sort({ created_at: -1 })
-      .limit(200)
       .lean()
 
     const result = visitors.map((v) => ({
       id: v._id.toString(),
       first_name: v.first_name,
       last_name: v.last_name,
-      email: v.email,
-      phone: v.phone,
       company: v.company,
-      business_type: v.business_type,
-      referral_source: v.referral_source,
-      invited_by: v.invited_by?.toString() ?? null,
       status: v.status,
-      visit_date: v.visit_date?.toISOString() ?? null,
-      notes: v.notes,
       created_at: v.created_at.toISOString(),
     }))
 
     return NextResponse.json(result)
   } catch (err) {
-    console.error('GET /api/visitors error:', err)
+    console.error('GET /api/members/visitors error:', err)
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
   }
 }

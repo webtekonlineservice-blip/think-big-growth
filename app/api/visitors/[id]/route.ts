@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAdminFirestore, getAdminAuth } from '@/lib/firebaseAdmin'
+import { connectDB } from '@/lib/mongodb'
+import Visitor from '@/lib/models/Visitor'
+import { getSession } from '@/lib/auth'
 
 interface Params {
   params: { id: string }
@@ -7,26 +9,22 @@ interface Params {
 
 /**
  * PATCH /api/visitors/[id]
- * Admin-only: update visitor status or notes.
+ * Admin-only: update visitor status, notes, or visit_date.
  */
 export async function PATCH(req: NextRequest, { params }: Params) {
+  const session = getSession(req)
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
+  }
+
+  if (!session.is_admin) {
+    return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
+  }
+
   try {
-    const authHeader = req.headers.get('authorization')
-
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-    const auth = getAdminAuth()
-    const decoded = await auth.verifyIdToken(token)
-
-    if (!decoded.admin) {
-      return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
-    }
-
     const body = await req.json()
-    const allowedFields = ['status', 'notes', 'visit_date']
+    const allowedFields = ['status', 'notes', 'visit_date'] as const
     const updates: Record<string, unknown> = {}
 
     for (const field of allowedFields) {
@@ -39,12 +37,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
     }
 
-    const db = getAdminFirestore()
-    await db.collection('visitors').doc(params.id).update(updates)
+    await connectDB()
+
+    const visitor = await Visitor.findByIdAndUpdate(
+      params.id,
+      { $set: updates },
+      { new: true, runValidators: true }
+    ).lean()
+
+    if (!visitor) {
+      return NextResponse.json({ error: 'Visitor not found.' }, { status: 404 })
+    }
 
     return NextResponse.json({ success: true })
   } catch (err) {
-    console.error('Error in PATCH /api/visitors/[id]:', err)
+    console.error('PATCH /api/visitors/[id] error:', err)
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
   }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
@@ -27,6 +27,21 @@ const initialForm: FormData = {
 }
 
 export default function JoinPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <svg className="w-8 h-8 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
+      </div>
+    }>
+      <JoinForm />
+    </Suspense>
+  )
+}
+
+function JoinForm() {
   const searchParams = useSearchParams()
   const [form, setForm] = useState<FormData>(initialForm)
   const [loading, setLoading] = useState(false)

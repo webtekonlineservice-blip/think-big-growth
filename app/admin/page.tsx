@@ -2,8 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { onAuthStateChanged, signOut, User } from 'firebase/auth'
-import { getFirebaseAuth } from '@/lib/firebase'
+
+interface SessionUser {
+  id: string
+  email: string
+  name: string
+  is_admin: boolean
+  invite_code: string
+}
 
 interface Visitor {
   id: string
@@ -34,63 +40,66 @@ const STATUS_STYLES: Record<Visitor['status'], string> = {
 
 export default function AdminDashboard() {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<SessionUser | null>(null)
   const [visitors, setVisitors] = useState<Visitor[]>([])
   const [stats, setStats] = useState<Stats>({ totalMembers: 0, visitorsThisMonth: 0, conversionRate: 0 })
   const [loading, setLoading] = useState(true)
-  const [isAdmin, setIsAdmin] = useState(false)
   const [smsModal, setSmsModal] = useState<{ open: boolean; visitorId: string; phone: string } | null>(null)
   const [smsMessage, setSmsMessage] = useState('')
   const [smsSending, setSmsSending] = useState(false)
 
-  const fetchAdminData = useCallback(async () => {
+  const fetchAdminData = useCallback(async (allVisitors: Visitor[]) => {
     try {
-      const [membersRes, visitorsRes] = await Promise.all([
-        fetch('/api/members'),
-        fetch('/api/visitors'),
-      ])
+      const membersRes = await fetch('/api/members')
       if (membersRes.ok) {
         const members = await membersRes.json()
         const now = new Date()
-        const thisMonth = visitors.filter((v) => {
+        const thisMonth = allVisitors.filter((v) => {
           const d = new Date(v.created_at)
           return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
         })
-        const converted = visitors.filter((v) => v.status === 'member').length
+        const converted = allVisitors.filter((v) => v.status === 'member').length
         setStats({
           totalMembers: members.length,
           visitorsThisMonth: thisMonth.length,
-          conversionRate: visitors.length > 0 ? Math.round((converted / visitors.length) * 100) : 0,
+          conversionRate: allVisitors.length > 0
+            ? Math.round((converted / allVisitors.length) * 100)
+            : 0,
         })
-      }
-      if (visitorsRes.ok) {
-        const data = await visitorsRes.json()
-        setVisitors(data)
       }
     } catch {
       // Non-fatal
     }
-  }, [visitors])
+  }, [])
 
   useEffect(() => {
-    const auth = getFirebaseAuth()
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
+    fetch('/api/auth/me')
+      .then(async (res) => {
+        if (!res.ok) {
+          router.push('/member/login')
+          return
+        }
+        const { user: sessionUser } = await res.json() as { user: SessionUser }
+
+        if (!sessionUser.is_admin) {
+          router.push('/member')
+          return
+        }
+
+        setUser(sessionUser)
+
+        // Fetch visitors first so stats can use the fresh data
+        const visitorsRes = await fetch('/api/visitors')
+        if (visitorsRes.ok) {
+          const data: Visitor[] = await visitorsRes.json()
+          setVisitors(data)
+          await fetchAdminData(data)
+        }
+      })
+      .catch(() => {
         router.push('/member/login')
-        return
-      }
-      setUser(u)
-      // Check admin claim via ID token
-      const token = await u.getIdTokenResult()
-      if (!token.claims.admin) {
-        router.push('/member')
-        return
-      }
-      setIsAdmin(true)
-      await fetchAdminData()
-      setLoading(false)
-    })
-    return unsub
+      })
+      .finally(() => setLoading(false))
   }, [router, fetchAdminData])
 
   const handleStatusChange = async (id: string, status: Visitor['status']) => {
@@ -127,8 +136,7 @@ export default function AdminDashboard() {
   }
 
   const handleSignOut = async () => {
-    const auth = getFirebaseAuth()
-    await signOut(auth)
+    await fetch('/api/auth/logout', { method: 'POST' })
     router.push('/')
   }
 
@@ -143,7 +151,7 @@ export default function AdminDashboard() {
     )
   }
 
-  if (!isAdmin) return null
+  if (!user) return null
 
   return (
     <div className="min-h-screen bg-gray-900">
@@ -152,14 +160,32 @@ export default function AdminDashboard() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-white">Admin Dashboard</h1>
-            <p className="text-xs text-gray-500">Think Big St. Louis · {user?.email}</p>
+            <p className="text-xs text-gray-500">Think Big St. Louis · {user.email}</p>
           </div>
-          <button
-            onClick={handleSignOut}
-            className="text-sm text-gray-400 hover:text-white transition-colors"
-          >
-            Sign Out
-          </button>
+          <div className="flex items-center gap-4">
+            <nav className="flex items-center gap-1">
+              {[
+                { label: 'Overview', href: '/admin' },
+                { label: 'Visitors', href: '/admin/visitors' },
+                { label: 'Members', href: '/admin/members' },
+              ].map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                >
+                  {link.label}
+                </a>
+              ))}
+            </nav>
+            <div className="w-px h-4 bg-gray-700" />
+            <button
+              onClick={handleSignOut}
+              className="text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </header>
 
@@ -181,6 +207,32 @@ export default function AdminDashboard() {
             <p className="text-4xl font-bold text-green-400">{stats.conversionRate}%</p>
             <p className="text-xs text-gray-500">Visitors who became members</p>
           </div>
+        </div>
+
+        {/* Quick links */}
+        <div className="grid grid-cols-2 gap-4">
+          <a href="/admin/visitors" className="card flex items-center gap-4 hover:border-brand-blue/40 transition-colors cursor-pointer">
+            <div className="w-10 h-10 bg-brand-blue/20 rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-brand-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-medium text-sm">Visitor Pipeline</p>
+              <p className="text-gray-500 text-xs">Manage all visitors, status &amp; notes</p>
+            </div>
+          </a>
+          <a href="/admin/members" className="card flex items-center gap-4 hover:border-brand-orange/40 transition-colors cursor-pointer">
+            <div className="w-10 h-10 bg-brand-orange/20 rounded-xl flex items-center justify-center flex-shrink-0">
+              <svg className="w-5 h-5 text-brand-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-medium text-sm">Member Management</p>
+              <p className="text-gray-500 text-xs">Add, edit, and manage member accounts</p>
+            </div>
+          </a>
         </div>
 
         {/* Visitors table */}
