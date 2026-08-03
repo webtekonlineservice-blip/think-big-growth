@@ -169,6 +169,7 @@ export default function AdminDashboard() {
                 { label: 'Visitors', href: '/admin/visitors' },
                 { label: 'Members', href: '/admin/members' },
                 { label: 'Campaigns', href: '/admin/campaigns' },
+                { label: 'Outbound', href: '/admin/outbound' },
                 { label: 'Analytics', href: '/admin/analytics' },
               ].map((link) => (
                 <a
