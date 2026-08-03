@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useSearchParams } from 'next/navigation'
 
 interface FormData {
@@ -137,8 +138,16 @@ function JoinForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 px-6 py-16">
-      <div className="max-w-xl mx-auto">
+    <div className="min-h-screen bg-[#0a0f1e] px-6 py-16">
+      {/* Nav */}
+      <nav className="fixed top-0 left-0 right-0 border-b border-gray-800/60 px-6 py-4 backdrop-blur-sm bg-[#0a0f1e]/80 z-40">
+        <div className="max-w-xl mx-auto flex items-center">
+          <Link href="/" className="group inline-flex items-center">
+            <Image src="/logo.png" alt="Webtek.ai" width={115} height={36} className="object-contain transition-all duration-300 group-hover:brightness-110 group-hover:scale-105" priority />
+          </Link>
+        </div>
+      </nav>
+      <div className="max-w-xl mx-auto pt-16">
         {/* Back link */}
         <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors mb-10">
           ← Back to Home
@@ -297,3 +306,4 @@ function JoinForm() {
     </div>
   )
 }
+

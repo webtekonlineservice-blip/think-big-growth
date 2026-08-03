@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import Logo from '@/components/Logo'
 
 interface Member {
   name: string
@@ -44,14 +45,9 @@ export default async function InvitePage({ params }: Props) {
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
       {/* Nav */}
-      <nav className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-brand-orange flex items-center justify-center font-bold text-sm text-white">
-            W
-          </div>
-          <span className="font-semibold text-white tracking-wide">
-            Webtek<span className="text-brand-orange">.</span>ai
-          </span>
+      <nav className="border-b border-gray-800/60 px-6 py-4 backdrop-blur-sm bg-[#0a0f1e]/80 sticky top-0 z-40">
+        <div className="max-w-5xl mx-auto flex items-center">
+          <Logo />
         </div>
       </nav>
 
@@ -160,10 +156,10 @@ export default async function InvitePage({ params }: Props) {
         </div>
       </main>
 
-      <footer className="border-t border-gray-800 px-6 py-6 text-center text-sm text-gray-600">
+      <footer className="border-t border-gray-800/60 px-6 py-6 text-center text-sm text-gray-600">
         © {new Date().getFullYear()} Think Big St. Louis — BNI Chapter · Powered by{' '}
-        <a href="https://webtek.ai" className="text-brand-orange hover:underline" target="_blank" rel="noopener noreferrer">
-          Webtek.ai
+        <a href="https://webtek.ai" className="hover:opacity-80 transition-opacity inline-flex items-center gap-1 align-middle" target="_blank" rel="noopener noreferrer">
+          <Logo size="sm" href="" />
         </a>
       </footer>
     </div>

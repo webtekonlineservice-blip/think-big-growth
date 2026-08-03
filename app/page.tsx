@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import Logo from '@/components/Logo'
 
 async function getCategories() {
   try {
@@ -63,17 +64,9 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
       {/* Nav */}
-      <nav className="border-b border-gray-800 px-6 py-4">
+      <nav className="border-b border-gray-800/60 px-6 py-4 backdrop-blur-sm bg-[#0a0f1e]/80 sticky top-0 z-40">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Webtek logo placeholder */}
-            <div className="w-8 h-8 rounded-md bg-brand-orange flex items-center justify-center font-bold text-sm text-white">
-              W
-            </div>
-            <span className="font-semibold text-white tracking-wide">
-              Webtek<span className="text-brand-orange">.</span>ai
-            </span>
-          </div>
+          <Logo />
           <div className="flex items-center gap-4">
             <Link
               href="/member/login"
@@ -257,20 +250,15 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-800 px-6 py-8">
+      <footer className="border-t border-gray-800/60 px-6 py-8">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-500">
           <p>© {new Date().getFullYear()} Think Big St. Louis — BNI Chapter</p>
-          <p>
-            Powered by{' '}
-            <a
-              href="https://webtek.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand-orange hover:text-brand-orange-dark transition-colors"
-            >
-              Webtek.ai
+          <div className="flex items-center gap-2">
+            <span>Powered by</span>
+            <a href="https://webtek.ai" target="_blank" rel="noopener noreferrer">
+              <Logo size="sm" href="" />
             </a>
-          </p>
+          </div>
         </div>
       </footer>
     </div>
