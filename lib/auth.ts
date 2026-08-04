@@ -34,14 +34,23 @@ export function verifyToken(token: string): SessionPayload | null {
 }
 
 /**
- * Read the session cookie from an incoming request and return the decoded payload.
- * Works in both Route Handlers (NextRequest) and Server Components (cookies()).
+ * Read the session from an incoming request.
+ * Checks: 1) Authorization: Bearer <token>  2) Cookie
+ * Works in Route Handlers (NextRequest) and Server Components (cookies()).
  */
 export function getSession(req?: NextRequest): SessionPayload | null {
   let token: string | undefined
 
   if (req) {
-    token = req.cookies.get(COOKIE_NAME)?.value
+    // Check Authorization header first (used by Chrome extension)
+    const authHeader = req.headers.get('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7)
+    }
+    // Fallback to cookie
+    if (!token) {
+      token = req.cookies.get(COOKIE_NAME)?.value
+    }
   } else {
     token = cookies().get(COOKIE_NAME)?.value
   }

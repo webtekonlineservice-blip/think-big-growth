@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Think Big Lead Capture</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">TB</div>
+      <div>
+        <h1>Lead Capture</h1>
+        <p class="subtitle">Think Big St. Louis</p>
+      </div>
+    </header>
+
+    <!-- Status bar -->
+    <div id="status" class="status hidden"></div>
+
+    <!-- Campaign selector -->
+    <div class="section">
+      <label class="label">Campaign</label>
+      <select id="campaign-select" class="select">
+        <option value="">Loading campaigns...</option>
+      </select>
+    </div>
+
+    <!-- Scraped leads preview -->
+    <div class="section">
+      <div class="section-header">
+        <label class="label">Captured Leads</label>
+        <span id="lead-count" class="badge">0</span>
+      </div>
+      <div id="leads-list" class="leads-list">
+        <p class="empty-state">Click "Scrape Page" to capture business contacts from this page.</p>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions">
+      <button id="btn-scrape" class="btn btn-secondary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        Scrape Page
+      </button>
+      <button id="btn-import" class="btn btn-primary" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Import <span id="import-count">0</span>
+      </button>
+    </div>
+
+    <!-- Manual add -->
+    <details class="manual-section">
+      <summary class="manual-toggle">+ Add manually</summary>
+      <div class="manual-form">
+        <input id="manual-name" type="text" placeholder="Business name" class="input" />
+        <input id="manual-email" type="email" placeholder="Email" class="input" />
+        <input id="manual-company" type="text" placeholder="Company" class="input" />
+        <input id="manual-profession" type="text" placeholder="Profession / Category" class="input" />
+        <input id="manual-phone" type="text" placeholder="Phone" class="input" />
+        <button id="btn-manual-add" class="btn btn-small">Add Lead</button>
+      </div>
+    </details>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <a href="options.html" target="_blank">Settings</a>
+      <span>v1.0.0</span>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

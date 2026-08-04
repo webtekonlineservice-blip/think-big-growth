@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "Think Big Lead Capture",
+  "version": "1.0.0",
+  "description": "Scrape business contacts from Google Maps, Yelp, chamber directories and push directly to Think Big Growth.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.google.com/maps/*",
+    "https://maps.google.com/*",
+    "https://www.yelp.com/*",
+    "https://*.chamberofcommerce.com/*",
+    "https://thinkbig.webtek.ai/*",
+    "http://localhost:3000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.google.com/maps/*",
+        "https://maps.google.com/*"
+      ],
+      "js": ["content/google-maps.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.yelp.com/*"],
+      "js": ["content/yelp.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://*.chamberofcommerce.com/*"],
+      "js": ["content/chamber.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
