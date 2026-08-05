@@ -1,7 +1,13 @@
 /**
- * Content script: ChamberMaster directories
- * Used by Kirkwood-Des Peres Chamber and hundreds of other chambers.
- * URL pattern: business.*.com/list, *.chambermaster.com/list
+ * Content script: ChamberMaster / GrowthZone directories
+ * Works on: business.kirkwooddesperes.com, *.chambermaster.com
+ *
+ * Page structure (observed from Kirkwood-Des Peres):
+ * Each business is in a container with:
+ *   - A heading link with the business name
+ *   - Address block with city/state/zip
+ *   - Phone number in text
+ *   - "Visit Website" link
  */
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -9,107 +15,100 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const leads = scrapeChamberMaster()
     sendResponse({ leads })
   }
+  return true
 })
 
 function scrapeChamberMaster() {
   const leads = []
+  const seen = new Set()
 
-  // ChamberMaster uses cards with class "card" or "mn-search-result"
-  // Also works on their alphabetical listing pages
-  const cards = document.querySelectorAll(
-    '.card.mn-search-result, .mn-search-result, .card-body, ' +
-    '[class*="gz-list-card"], [class*="gz-results"], ' +
-    '.list-group-item, .mn-member-row'
-  )
+  // The page text contains structured blocks for each business
+  // Strategy: find all phone numbers on the page and work backwards to find the business name
+  const bodyText = document.body.innerText || ''
+  const bodyHtml = document.body.innerHTML || ''
 
-  if (cards.length > 0) {
-    cards.forEach((card) => {
-      const nameEl = card.querySelector(
-        'h5 a, h4 a, h3 a, .mn-member-name a, .card-title a, [class*="name"] a, ' +
-        '.mn-searchresult-name a, a.mn-search-result-link'
-      )
-      const name = nameEl?.textContent?.trim() || ''
+  // Approach 1: Find all links that look like business names (heading links)
+  // On ChamberMaster, business names are typically in heading elements or bold links
+  const allLinks = document.querySelectorAll('a')
+  const businessLinks = []
 
-      // Phone — look for tel: links or formatted numbers
-      let phone = ''
-      const telLink = card.querySelector('a[href^="tel:"]')
-      if (telLink) {
-        phone = telLink.textContent?.trim() || telLink.href.replace('tel:', '')
-      } else {
-        const phoneMatch = (card.textContent || '').match(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/)
-        if (phoneMatch) phone = phoneMatch[0]
+  allLinks.forEach((link) => {
+    const href = link.href || ''
+    const text = link.textContent?.trim() || ''
+    // Business detail links typically go to /list/member/... or contain the member name
+    if (text.length > 2 && text.length < 100 &&
+        !href.includes('javascript:') &&
+        !text.includes('Visit Website') &&
+        !text.includes('Search') &&
+        !text.includes('Directory') &&
+        !text.includes('Events') &&
+        !text.includes('Contact') &&
+        !text.includes('Hot Deals') &&
+        !text.includes('Job Post') &&
+        !text.includes('Member To Member') &&
+        (href.includes('/list/') || href.includes('/member/')) &&
+        !seen.has(text.toLowerCase())) {
+
+      // This is likely a business name link
+      businessLinks.push({ name: text, element: link })
+      seen.add(text.toLowerCase())
+    }
+  })
+
+  // For each business name, find the nearest phone number and website
+  businessLinks.forEach(({ name, element }) => {
+    // Walk up to find the containing block
+    let container = element.parentElement
+    for (let i = 0; i < 6; i++) {
+      if (container?.parentElement) container = container.parentElement
+      // Stop if container has enough content
+      const text = container?.textContent || ''
+      if (text.length > 50 && text.includes(name)) break
+    }
+
+    const containerText = container?.textContent || ''
+    const containerHtml = container?.innerHTML || ''
+
+    // Extract phone
+    const phoneMatch = containerText.match(/\(?(\d{3})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})/)
+    const phone = phoneMatch ? phoneMatch[0] : ''
+
+    // Extract website (look for external links, not chamber links)
+    let website = ''
+    const links = container?.querySelectorAll('a[href]') || []
+    links.forEach((a) => {
+      const h = a.href || ''
+      const t = a.textContent?.trim() || ''
+      if (t === 'Visit Website' || (h.includes('http') &&
+          !h.includes('kirkwooddesperes') && !h.includes('chambermaster') &&
+          !h.includes('growthzone') && !h.includes('mailto:') &&
+          !h.includes('tel:') && !h.includes('maps.google'))) {
+        website = h
       }
+    })
 
-      // Website link
-      let website = ''
-      const links = card.querySelectorAll('a[href]')
-      links.forEach((a) => {
-        const href = a.href || ''
-        if (href.includes('http') && !href.includes('chambermaster') &&
-            !href.includes('kirkwooddesperes') && !href.includes('mailto:') &&
-            !href.includes('tel:') && !href.includes('google.com/maps')) {
-          website = href
-        }
+    // Extract email if present
+    const emailMatch = containerHtml.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)
+    const email = emailMatch ? emailMatch[0] : ''
+
+    // Extract city
+    let city = ''
+    const cityMatch = containerText.match(/(?:Kirkwood|Des Peres|Saint Louis|St\. Louis|Clayton|Fenton|Manchester|Valley Park|Webster Groves|University City|Eureka|Warson Woods)/i)
+    if (cityMatch) city = cityMatch[0]
+
+    // Only add if we have a name and at least a phone or website
+    if (name && (phone || website || email)) {
+      leads.push({
+        name,
+        email,
+        company: name,
+        profession: '',
+        phone,
+        website,
+        source: 'kirkwood_chamber',
       })
-
-      // Email
-      let email = ''
-      const emailLink = card.querySelector('a[href^="mailto:"]')
-      if (emailLink) {
-        email = emailLink.href.replace('mailto:', '').split('?')[0]
-      } else {
-        const emailMatch = (card.innerHTML || '').match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)
-        if (emailMatch) email = emailMatch[0]
-      }
-
-      // Category
-      const category = card.querySelector(
-        '.mn-search-result-category, [class*="category"], .badge, .mn-cat'
-      )?.textContent?.trim() || ''
-
-      // Address
-      const address = card.querySelector(
-        '.mn-search-result-address, [class*="address"], .card-text'
-      )?.textContent?.trim() || ''
-
-      if (name) {
-        leads.push({
-          name,
-          email,
-          company: name,
-          profession: category,
-          phone,
-          website,
-          source: 'kirkwood_chamber',
-        })
-      }
-    })
-  }
-
-  // Fallback: alphabetical listing pages (simpler structure)
-  if (leads.length === 0) {
-    // These pages often have simpler list structures
-    const listItems = document.querySelectorAll('.list-group-item, .mn-alphabetical-item, tr')
-    listItems.forEach((item) => {
-      const nameEl = item.querySelector('a')
-      const name = nameEl?.textContent?.trim() || ''
-      const phone = ((item.textContent || '').match(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/) || [])[0] || ''
-      const emailMatch = (item.innerHTML || '').match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)
-      const email = emailMatch ? emailMatch[0] : ''
-
-      if (name && name.length > 2 && (email || phone)) {
-        leads.push({
-          name,
-          email,
-          company: name,
-          profession: '',
-          phone,
-          website: '',
-          source: 'kirkwood_chamber',
-        })
-      }
-    })
-  }
+    }
+  })
 
   return leads
 }

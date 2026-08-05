@@ -6,18 +6,20 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0f1e; color: #f1f5f9; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-    .card { background: #111827; border: 1px solid #1e293b; border-radius: 16px; padding: 32px; width: 100%; max-width: 420px; }
+    .card { background: #111827; border: 1px solid #1e293b; border-radius: 16px; padding: 32px; width: 100%; max-width: 480px; }
     h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
     .subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; }
     label { display: block; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
     input { width: 100%; background: #0a0f1e; border: 1px solid #1e293b; color: #f1f5f9; padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; }
     input:focus { outline: none; border-color: #4F46E5; }
-    .help { font-size: 11px; color: #475569; margin-top: -12px; margin-bottom: 16px; }
+    .help { font-size: 11px; color: #475569; margin-top: -12px; margin-bottom: 16px; line-height: 1.5; }
     button { background: #4F46E5; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; width: 100%; }
     button:hover { background: #3730A3; }
-    .status { margin-top: 12px; padding: 8px 12px; border-radius: 8px; font-size: 12px; display: none; }
-    .status.show { display: block; }
-    .status.success { background: rgba(34,197,94,0.15); color: #4ade80; }
+    #status { margin-top: 12px; padding: 10px 14px; border-radius: 8px; font-size: 12px; font-weight: 500; display: none; }
+    #status.show { display: block; }
+    #status.success { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+    #status.error { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.3); }
+    code { background: #1e293b; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
   </style>
 </head>
 <body>
@@ -25,42 +27,22 @@
     <h1>Settings</h1>
     <p class="subtitle">Think Big Lead Capture Extension</p>
 
-    <label>API URL</label>
-    <input id="api-url" type="url" placeholder="https://thinkbig.webtek.ai" />
-    <p class="help">Your Think Big Growth app URL. Default: https://thinkbig.webtek.ai</p>
+    <label for="api-url">API URL</label>
+    <input id="api-url" type="url" value="https://thinkbig.webtek.ai" />
+    <p class="help">Your Think Big Growth app URL.</p>
 
-    <label>Auth Token (Session JWT)</label>
-    <input id="auth-token" type="password" placeholder="Paste your tbg_session cookie value" />
+    <label for="auth-token">Auth Token (Session JWT)</label>
+    <input id="auth-token" type="text" placeholder="Paste your token here" />
     <p class="help">
-      To get this: Log in at your app → open browser DevTools → Application → Cookies → 
-      copy the value of <code>tbg_session</code>.
+      Get this by running in your terminal:<br/>
+      <code>curl -s -X POST https://thinkbig.webtek.ai/api/ext/auth -H "Content-Type: application/json" -d '{"email":"your@email","password":"yourpass"}'</code><br/><br/>
+      Or: Log in → DevTools → Application → Cookies → copy <code>tbg_session</code> value.
     </p>
 
     <button id="btn-save">Save Settings</button>
-    <div id="status" class="status"></div>
+    <div id="status"></div>
   </div>
 
-  <script>
-    const apiUrlInput = document.getElementById('api-url')
-    const authTokenInput = document.getElementById('auth-token')
-    const statusEl = document.getElementById('status')
-
-    // Load saved settings
-    chrome.storage.sync.get(['apiUrl', 'authToken'], (data) => {
-      apiUrlInput.value = data.apiUrl || 'https://thinkbig.webtek.ai'
-      authTokenInput.value = data.authToken || ''
-    })
-
-    document.getElementById('btn-save').addEventListener('click', () => {
-      const apiUrl = apiUrlInput.value.trim().replace(/\/$/, '') || 'https://thinkbig.webtek.ai'
-      const authToken = authTokenInput.value.trim()
-
-      chrome.storage.sync.set({ apiUrl, authToken }, () => {
-        statusEl.textContent = 'Settings saved!'
-        statusEl.className = 'status show success'
-        setTimeout(() => { statusEl.className = 'status' }, 3000)
-      })
-    })
-  </script>
+  <script src="options.js"></script>
 </body>
 </html>
