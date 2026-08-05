@@ -200,6 +200,16 @@ body {
 }
 .btn-small:hover { background: #3730A3; }
 
+.btn-danger {
+  width: 100%;
+  background: transparent;
+  color: #f87171;
+  border: 1px solid rgba(239,68,68,0.3);
+  font-size: 11px;
+  padding: 7px;
+}
+.btn-danger:hover { background: rgba(239,68,68,0.1); }
+
 /* Manual add */
 .manual-section {
   border-top: 1px solid #1e293b;

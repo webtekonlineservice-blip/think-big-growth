@@ -24,7 +24,7 @@
     <div class="section">
       <label class="label">Campaign</label>
       <select id="campaign-select" class="select">
-        <option value="">Loading campaigns...</option>
+        <option value="">Loading...</option>
       </select>
     </div>
 
@@ -35,7 +35,7 @@
         <span id="lead-count" class="badge">0</span>
       </div>
       <div id="leads-list" class="leads-list">
-        <p class="empty-state">Click "Scrape Page" to capture business contacts from this page.</p>
+        <p class="empty-state">Browse a business directory and click<br/>"Scrape Page" to capture contacts.</p>
       </div>
     </div>
 
@@ -51,22 +51,25 @@
       </button>
     </div>
 
+    <!-- Clear button -->
+    <button id="btn-clear" class="btn btn-danger" style="display:none;">Clear All Leads</button>
+
     <!-- Manual add -->
     <details class="manual-section">
-      <summary class="manual-toggle">+ Add manually</summary>
+      <summary class="manual-toggle">+ Add lead manually</summary>
       <div class="manual-form">
-        <input id="manual-name" type="text" placeholder="Business name" class="input" />
-        <input id="manual-email" type="email" placeholder="Email" class="input" />
-        <input id="manual-company" type="text" placeholder="Company" class="input" />
+        <input id="manual-name" type="text" placeholder="Contact name" class="input" />
+        <input id="manual-email" type="email" placeholder="Email *" class="input" />
+        <input id="manual-company" type="text" placeholder="Company / Business" class="input" />
         <input id="manual-profession" type="text" placeholder="Profession / Category" class="input" />
-        <input id="manual-phone" type="text" placeholder="Phone" class="input" />
+        <input id="manual-phone" type="text" placeholder="Phone (optional)" class="input" />
         <button id="btn-manual-add" class="btn btn-small">Add Lead</button>
       </div>
     </details>
 
     <!-- Footer -->
     <footer class="footer">
-      <a href="options.html" target="_blank">Settings</a>
+      <a href="options.html" target="_blank">⚙ Settings</a>
       <span>v1.0.0</span>
     </footer>
   </div>

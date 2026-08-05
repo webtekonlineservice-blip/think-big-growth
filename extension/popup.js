@@ -4,42 +4,40 @@
 
 let leads = []
 
-// DOM refs
 const campaignSelect = document.getElementById('campaign-select')
 const leadsList = document.getElementById('leads-list')
 const leadCount = document.getElementById('lead-count')
-const importCount = document.getElementById('import-count')
 const btnScrape = document.getElementById('btn-scrape')
 const btnImport = document.getElementById('btn-import')
+const btnClear = document.getElementById('btn-clear')
 const statusEl = document.getElementById('status')
 
 // ── Init ─────────────────────────────────────────────────────────────────────
-
 document.addEventListener('DOMContentLoaded', async () => {
   await loadCampaigns()
   await loadSavedLeads()
 })
 
 // ── Load campaigns ───────────────────────────────────────────────────────────
-
 async function loadCampaigns() {
   chrome.runtime.sendMessage({ type: 'GET_CAMPAIGNS' }, (response) => {
-    if (response?.error) {
-      showStatus('error', response.error)
-      campaignSelect.innerHTML = '<option value="">⚠ Check settings</option>'
+    if (chrome.runtime.lastError) {
+      showStatus('error', 'Extension error. Try reloading.')
       return
     }
-
+    if (response?.error) {
+      showStatus('error', response.error)
+      campaignSelect.innerHTML = '<option value="">⚠ ' + escHtml(response.error) + '</option>'
+      return
+    }
     if (!response?.length) {
       campaignSelect.innerHTML = '<option value="">No campaigns — create one in admin</option>'
       return
     }
-
     campaignSelect.innerHTML = response
-      .map((c) => `<option value="${c.id}">${c.name} (${c.total_prospects} prospects)</option>`)
+      .map((c) => `<option value="${c.id}">${escHtml(c.name)} (${c.total_prospects})</option>`)
       .join('')
 
-    // Restore last selected campaign
     chrome.storage.local.get('lastCampaign', (data) => {
       if (data.lastCampaign) campaignSelect.value = data.lastCampaign
     })
@@ -47,61 +45,58 @@ async function loadCampaigns() {
 }
 
 // ── Scrape page ──────────────────────────────────────────────────────────────
-
 btnScrape.addEventListener('click', async () => {
   btnScrape.disabled = true
-  btnScrape.textContent = 'Scraping...'
+  btnScrape.textContent = 'Scanning...'
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
 
-    // Try content script first (auto-injected for known sites)
+    // First try sending to existing content script
     chrome.tabs.sendMessage(tab.id, { type: 'SCRAPE' }, (response) => {
       if (chrome.runtime.lastError || !response?.leads?.length) {
-        // Fallback: inject generic scraper
-        chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['content/generic.js'],
-        }, () => {
+        // Inject generic scraper and retry
+        chrome.runtime.sendMessage({ type: 'SCRAPE_GENERIC', tabId: tab.id }, () => {
           setTimeout(() => {
             chrome.tabs.sendMessage(tab.id, { type: 'SCRAPE' }, (resp) => {
-              if (resp?.leads?.length) {
-                addLeads(resp.leads)
-                showStatus('success', `Found ${resp.leads.length} leads`)
-              } else {
-                showStatus('info', 'No leads found on this page. Try a different page or add manually.')
-              }
-              btnScrape.disabled = false
-              btnScrape.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Scrape Page'
+              handleScrapeResult(resp?.leads || [])
             })
-          }, 500)
+          }, 600)
         })
-        return
+      } else {
+        handleScrapeResult(response.leads)
       }
-
-      addLeads(response.leads)
-      showStatus('success', `Found ${response.leads.length} leads`)
-      btnScrape.disabled = false
-      btnScrape.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Scrape Page'
     })
   } catch (err) {
-    showStatus('error', 'Scrape failed: ' + err.message)
-    btnScrape.disabled = false
-    btnScrape.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Scrape Page'
+    showStatus('error', 'Failed: ' + err.message)
+    resetScrapeBtn()
   }
 })
 
-// ── Import to app ────────────────────────────────────────────────────────────
+function handleScrapeResult(newLeads) {
+  if (newLeads.length > 0) {
+    addLeads(newLeads)
+    showStatus('success', `Found ${newLeads.length} leads!`)
+  } else {
+    showStatus('info', 'No leads found. Try a business directory page or add manually.')
+  }
+  resetScrapeBtn()
+}
 
+function resetScrapeBtn() {
+  btnScrape.disabled = false
+  btnScrape.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Scrape Page`
+}
+
+// ── Import ───────────────────────────────────────────────────────────────────
 btnImport.addEventListener('click', () => {
   const campaignId = campaignSelect.value
   if (!campaignId) { showStatus('error', 'Select a campaign first.'); return }
-  if (!leads.length) { showStatus('error', 'No leads to import.'); return }
+  if (!leads.length) return
 
   btnImport.disabled = true
   btnImport.textContent = 'Importing...'
 
-  // Save last campaign choice
   chrome.storage.local.set({ lastCampaign: campaignId })
 
   chrome.runtime.sendMessage({
@@ -111,19 +106,33 @@ btnImport.addEventListener('click', () => {
   }, (response) => {
     if (response?.error) {
       showStatus('error', response.error)
+      btnImport.disabled = false
     } else {
-      showStatus('success', `Imported ${response.imported} leads (${response.skipped} skipped)`)
+      showStatus('success', `✓ Imported ${response.imported} leads! (${response.skipped} duplicates skipped)`)
+      // Reset everything
       leads = []
-      chrome.storage.local.set({ savedLeads: [] })
       renderLeads()
     }
-    btnImport.disabled = false
-    btnImport.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Import <span id="import-count">0</span>'
+    resetImportBtn()
   })
 })
 
-// ── Manual add ───────────────────────────────────────────────────────────────
+function resetImportBtn() {
+  btnImport.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Import <span id="import-count">${leads.length}</span>`
+  btnImport.disabled = leads.length === 0
+}
 
+// ── Clear all ────────────────────────────────────────────────────────────────
+btnClear.addEventListener('click', () => {
+  if (leads.length === 0) return
+  if (!confirm(`Clear all ${leads.length} captured leads?`)) return
+  leads = []
+  chrome.storage.local.set({ savedLeads: [] })
+  renderLeads()
+  showStatus('info', 'Cleared.')
+})
+
+// ── Manual add ───────────────────────────────────────────────────────────────
 document.getElementById('btn-manual-add').addEventListener('click', () => {
   const name = document.getElementById('manual-name').value.trim()
   const email = document.getElementById('manual-email').value.trim()
@@ -133,32 +142,32 @@ document.getElementById('btn-manual-add').addEventListener('click', () => {
 
   if (!email) { showStatus('error', 'Email is required.'); return }
 
-  addLeads([{ name, email, company, profession, phone, source: 'manual' }])
+  addLeads([{ name: name || company, email, company, profession, phone, source: 'manual' }])
   showStatus('success', 'Lead added.')
 
   // Clear form
-  document.getElementById('manual-name').value = ''
-  document.getElementById('manual-email').value = ''
-  document.getElementById('manual-company').value = ''
-  document.getElementById('manual-profession').value = ''
-  document.getElementById('manual-phone').value = ''
+  ;['manual-name', 'manual-email', 'manual-company', 'manual-profession', 'manual-phone'].forEach(id => {
+    document.getElementById(id).value = ''
+  })
 })
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function addLeads(newLeads) {
-  // Deduplicate by email
   const existing = new Set(leads.map((l) => l.email.toLowerCase()))
+  let added = 0
   for (const lead of newLeads) {
     if (!lead.email) continue
     const em = lead.email.toLowerCase()
     if (!existing.has(em)) {
       leads.push(lead)
       existing.add(em)
+      added++
     }
   }
   chrome.storage.local.set({ savedLeads: leads })
   renderLeads()
+  return added
 }
 
 function removeLead(index) {
@@ -172,9 +181,10 @@ function renderLeads() {
   const ic = document.getElementById('import-count')
   if (ic) ic.textContent = leads.length
   btnImport.disabled = leads.length === 0
+  btnClear.style.display = leads.length > 0 ? 'inline-flex' : 'none'
 
   if (leads.length === 0) {
-    leadsList.innerHTML = '<p class="empty-state">Click "Scrape Page" to capture business contacts from this page.</p>'
+    leadsList.innerHTML = '<p class="empty-state">Browse a business directory and click<br/>"Scrape Page" to capture contacts.</p>'
     return
   }
 
@@ -185,12 +195,10 @@ function renderLeads() {
           <div class="lead-name">${escHtml(l.name || l.company || 'Unknown')}</div>
           <div class="lead-email">${escHtml(l.email)}${l.phone ? ' · ' + escHtml(l.phone) : ''}</div>
         </div>
-        <button class="lead-remove" data-index="${i}">×</button>
-      </div>
-    `)
+        <button class="lead-remove" data-index="${i}" title="Remove">×</button>
+      </div>`)
     .join('')
 
-  // Attach remove handlers
   leadsList.querySelectorAll('.lead-remove').forEach((btn) => {
     btn.addEventListener('click', () => removeLead(parseInt(btn.dataset.index)))
   })
@@ -208,9 +216,11 @@ function showStatus(type, message) {
   statusEl.className = `status ${type}`
   statusEl.textContent = message
   statusEl.classList.remove('hidden')
-  setTimeout(() => statusEl.classList.add('hidden'), 5000)
+  clearTimeout(statusEl._timeout)
+  statusEl._timeout = setTimeout(() => statusEl.classList.add('hidden'), 4000)
 }
 
 function escHtml(str) {
+  if (!str) return ''
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
