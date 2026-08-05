@@ -13,6 +13,9 @@
     "https://maps.google.com/*",
     "https://www.yelp.com/*",
     "https://*.chamberofcommerce.com/*",
+    "https://*.chambermaster.com/*",
+    "https://business.kirkwooddesperes.com/*",
+    "https://www.kirkwooddesperes.com/*",
     "https://thinkbig.webtek.ai/*",
     "http://localhost:3000/*"
   ],
@@ -45,6 +48,14 @@
     {
       "matches": ["https://*.chamberofcommerce.com/*"],
       "js": ["content/chamber.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://business.kirkwooddesperes.com/*",
+        "https://*.chambermaster.com/*"
+      ],
+      "js": ["content/chambermaster.js"],
       "run_at": "document_idle"
     }
   ],
