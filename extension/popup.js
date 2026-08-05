@@ -51,22 +51,46 @@ btnScrape.addEventListener('click', async () => {
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    const url = tab.url || ''
 
-    // First try sending to existing content script
-    chrome.tabs.sendMessage(tab.id, { type: 'SCRAPE' }, (response) => {
-      if (chrome.runtime.lastError || !response?.leads?.length) {
-        // Inject generic scraper and retry
-        chrome.runtime.sendMessage({ type: 'SCRAPE_GENERIC', tabId: tab.id }, () => {
-          setTimeout(() => {
-            chrome.tabs.sendMessage(tab.id, { type: 'SCRAPE' }, (resp) => {
-              handleScrapeResult(resp?.leads || [])
-            })
-          }, 600)
-        })
-      } else {
-        handleScrapeResult(response.leads)
-      }
+    // Determine which scraper to inject based on URL
+    let scriptFile = 'content/generic.js'
+    if (url.includes('google.com/maps') || url.includes('maps.google')) {
+      scriptFile = 'content/google-maps.js'
+    } else if (url.includes('yelp.com')) {
+      scriptFile = 'content/yelp.js'
+    } else if (url.includes('chambermaster.com') || url.includes('kirkwooddesperes.com')) {
+      scriptFile = 'content/chambermaster.js'
+    } else if (url.includes('chamberofcommerce.com')) {
+      scriptFile = 'content/chamber.js'
+    }
+
+    // Always inject the script fresh to ensure latest version runs
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: [scriptFile],
     })
+
+    // Small delay then ask for results
+    setTimeout(() => {
+      chrome.tabs.sendMessage(tab.id, { type: 'SCRAPE' }, (response) => {
+        if (chrome.runtime.lastError) {
+          // Try generic as last fallback
+          chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            files: ['content/generic.js'],
+          }).then(() => {
+            setTimeout(() => {
+              chrome.tabs.sendMessage(tab.id, { type: 'SCRAPE' }, (resp) => {
+                handleScrapeResult(resp?.leads || [])
+              })
+            }, 400)
+          })
+        } else {
+          handleScrapeResult(response?.leads || [])
+        }
+      })
+    }, 300)
   } catch (err) {
     showStatus('error', 'Failed: ' + err.message)
     resetScrapeBtn()
