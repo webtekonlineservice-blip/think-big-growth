@@ -178,16 +178,16 @@ document.getElementById('btn-manual-add').addEventListener('click', () => {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function addLeads(newLeads) {
-  const existing = new Set(leads.map((l) => l.email.toLowerCase()))
+  const existing = new Set(leads.map((l) => (l.email || l.name || '').toLowerCase()))
   let added = 0
   for (const lead of newLeads) {
-    if (!lead.email) continue
-    const em = lead.email.toLowerCase()
-    if (!existing.has(em)) {
-      leads.push(lead)
-      existing.add(em)
-      added++
-    }
+    // Accept leads with email OR name+phone (don't require email)
+    if (!lead.email && !lead.name && !lead.company) continue
+    const key = (lead.email || lead.name || lead.company || '').toLowerCase()
+    if (!key || existing.has(key)) continue
+    leads.push(lead)
+    existing.add(key)
+    added++
   }
   chrome.storage.local.set({ savedLeads: leads })
   renderLeads()
@@ -217,7 +217,7 @@ function renderLeads() {
       <div class="lead-item">
         <div class="lead-info">
           <div class="lead-name">${escHtml(l.name || l.company || 'Unknown')}</div>
-          <div class="lead-email">${escHtml(l.email)}${l.phone ? ' · ' + escHtml(l.phone) : ''}</div>
+          <div class="lead-email">${escHtml(l.email || '')}${l.email && l.phone ? ' · ' : ''}${escHtml(l.phone || '')}</div>
         </div>
         <button class="lead-remove" data-index="${i}" title="Remove">×</button>
       </div>`)
