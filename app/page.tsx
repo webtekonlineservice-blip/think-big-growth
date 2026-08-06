@@ -167,23 +167,6 @@ export default function HomePage() {
       {/* Open categories section */}
       <OpenCategories />
 
-      {/* CTA */}
-      <section className="px-6 py-16 border-t border-gray-800">
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Ready to see it for yourself?
-          </h2>
-          <p className="text-gray-400 mb-8">
-            Guests are welcome to visit twice before applying for membership.
-            Register below and we'll confirm your spot and send you everything
-            you need to know.
-          </p>
-          <Link href="/join" className="btn-primary text-base px-10 py-4">
-            Request to Visit →
-          </Link>
-        </div>
-      </section>
-
       {/* Footer */}
       <footer className="border-t border-gray-800/60 px-6 py-8">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-500">
