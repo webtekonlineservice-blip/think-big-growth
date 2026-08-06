@@ -13,6 +13,7 @@ interface FormData {
   company: string
   businessType: string
   referralSource: string
+  visitDate: string
   refCode: string
 }
 
@@ -24,7 +25,26 @@ const initialForm: FormData = {
   company: '',
   businessType: '',
   referralSource: '',
+  visitDate: '',
   refCode: '',
+}
+
+function getNextThursdays(count: number): { label: string; value: string }[] {
+  const dates: { label: string; value: string }[] = []
+  const today = new Date()
+  const day = today.getDay() // 0=Sun, 4=Thu
+  let daysUntilThursday = (4 - day + 7) % 7
+  if (daysUntilThursday === 0) daysUntilThursday = 7 // skip today if it's Thursday
+
+  for (let i = 0; i < count; i++) {
+    const d = new Date(today)
+    d.setDate(today.getDate() + daysUntilThursday + i * 7)
+    dates.push({
+      label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+      value: d.toISOString().slice(0, 10),
+    })
+  }
+  return dates
 }
 
 export default function JoinPage() {
@@ -273,6 +293,28 @@ function JoinForm() {
 
           {/* Hidden ref code */}
           <input type="hidden" name="refCode" value={form.refCode} />
+
+          {/* Thursday picker */}
+          <div>
+            <label className="label">Which Thursday would you like to visit? *</label>
+            <div className="grid grid-cols-3 gap-2">
+              {getNextThursdays(6).map((d) => (
+                <button
+                  key={d.value}
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, visitDate: d.value }))}
+                  className={`px-3 py-3 rounded-lg text-sm font-medium border transition-all duration-200 ${
+                    form.visitDate === d.value
+                      ? 'bg-brand-red/20 border-brand-red text-white shadow-sm shadow-brand-red/20'
+                      : 'border-gray-700 text-gray-400 hover:border-gray-500 hover:text-white'
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-2">11:30 AM at Mike Duffy's Pub & Grill, Kirkwood MO</p>
+          </div>
 
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-lg px-4 py-3 text-sm">

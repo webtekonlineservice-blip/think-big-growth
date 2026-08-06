@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       let errors = 0
 
       // Find prospects ready for next email
-      // Conditions: not unsubscribed, sequence_step < maxStep, and enough days have passed
+      // Conditions: not unsubscribed, sequence_step < maxStep, has real email, enough days passed
       const now = new Date()
 
       const prospects = await Prospect.find({
@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
         unsubscribed: false,
         sequence_step: { $lt: maxStep },
         status: { $nin: ['converted', 'unsubscribed'] },
+        email: { $not: /placeholder\.local$/ },
       })
         .sort({ created_at: 1 })
         .limit(campaign.batch_size)
