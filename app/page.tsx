@@ -171,11 +171,14 @@ export default function HomePage() {
       <footer className="border-t border-gray-800/60 px-6 py-8">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-500">
           <p>© {new Date().getFullYear()} Think Big St. Louis — BNI Chapter</p>
-          <div className="flex items-center gap-2">
-            <span>Powered by</span>
-            <a href="https://webtek.ai" target="_blank" rel="noopener noreferrer">
-              <Logo size="sm" href="" />
-            </a>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-gray-600">v0.01 beta</span>
+            <div className="flex items-center gap-2">
+              <span>Powered by</span>
+              <a href="https://webtek.ai" target="_blank" rel="noopener noreferrer">
+                <Logo size="sm" href="" />
+              </a>
+            </div>
           </div>
         </div>
       </footer>

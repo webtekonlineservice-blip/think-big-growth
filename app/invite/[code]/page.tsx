@@ -10,8 +10,7 @@ interface Member {
 
 async function getMember(code: string): Promise<Member | null> {
   try {
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+    const baseUrl = 'https://thinkbig.webtek.ai'
     const res = await fetch(`${baseUrl}/api/invite/${code}`, {
       next: { revalidate: 300 },
     })
@@ -29,9 +28,28 @@ interface Props {
 export async function generateMetadata({ params }: Props) {
   const member = await getMember(params.code)
   if (!member) return { title: 'Invite | Think Big St. Louis' }
+
+  const title = `${member.name} invited you to Think Big St. Louis`
+  const description = `You've been personally invited by ${member.name}${member.company ? ` from ${member.company}` : ''} to visit our BNI chapter. One seat per profession — grow your business through referrals. Every Thursday 11:30 AM in Kirkwood, MO. Free to visit.`
+  const url = `https://thinkbig.webtek.ai/invite/${params.code}`
+
   return {
-    title: `${member.name} invites you to Think Big St. Louis`,
-    description: `You've been personally invited by ${member.name} to visit our BNI chapter in Kirkwood, MO.`,
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: 'Think Big St. Louis',
+      images: [{ url: 'https://thinkbig.webtek.ai/og-image.png', width: 1200, height: 630 }],
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: ['https://thinkbig.webtek.ai/og-image.png'],
+    },
   }
 }
 

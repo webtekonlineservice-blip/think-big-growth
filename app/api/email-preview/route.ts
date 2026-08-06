@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thinkbig.webtek.ai'
+const APP_URL = 'https://thinkbig.webtek.ai'
 
 /**
  * POST /api/email-preview
