@@ -48,3 +48,55 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
   }
 }
+
+/**
+ * POST /api/visitors
+ * Admin-only: manually add a visitor.
+ */
+export async function POST(req: NextRequest) {
+  const session = getSession(req)
+
+  if (!session?.is_admin) {
+    return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
+  }
+
+  try {
+    const body = await req.json()
+    const { first_name, last_name, email, phone, company, business_type, referral_source, status } = body
+
+    if (!first_name?.trim() || !last_name?.trim()) {
+      return NextResponse.json({ error: 'First and last name are required.' }, { status: 400 })
+    }
+
+    await connectDB()
+
+    const visitor = await Visitor.create({
+      first_name: first_name.trim(),
+      last_name: last_name.trim(),
+      email: email?.trim()?.toLowerCase() ?? '',
+      phone: phone?.trim() ?? '',
+      company: company?.trim() ?? '',
+      business_type: business_type?.trim() ?? '',
+      referral_source: referral_source?.trim() ?? 'admin_added',
+      invited_by: session.id,
+      status: status ?? 'invited',
+      visit_date: null,
+      notes: '',
+    })
+
+    return NextResponse.json({
+      id: visitor._id.toString(),
+      first_name: visitor.first_name,
+      last_name: visitor.last_name,
+      email: visitor.email,
+      phone: visitor.phone,
+      company: visitor.company,
+      business_type: visitor.business_type,
+      status: visitor.status,
+      created_at: visitor.created_at.toISOString(),
+    }, { status: 201 })
+  } catch (err) {
+    console.error('POST /api/visitors error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+  }
+}

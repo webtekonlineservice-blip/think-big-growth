@@ -55,3 +55,29 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
   }
 }
+
+/**
+ * DELETE /api/visitors/[id]
+ * Admin-only: remove a visitor.
+ */
+export async function DELETE(req: NextRequest, { params }: Params) {
+  const session = getSession(req)
+
+  if (!session?.is_admin) {
+    return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
+  }
+
+  try {
+    await connectDB()
+
+    const visitor = await Visitor.findByIdAndDelete(params.id)
+    if (!visitor) {
+      return NextResponse.json({ error: 'Visitor not found.' }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('DELETE /api/visitors/[id] error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+  }
+}

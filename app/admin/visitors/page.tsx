@@ -53,6 +53,11 @@ export default function AdminVisitorsPage() {
   const [smsMessage, setSmsMessage] = useState('')
   const [smsSending, setSmsSending] = useState(false)
 
+  // Add visitor modal
+  const [addModal, setAddModal] = useState(false)
+  const [addForm, setAddForm] = useState({ first_name: '', last_name: '', email: '', phone: '', company: '', business_type: '' })
+  const [addSaving, setAddSaving] = useState(false)
+
   const fetchVisitors = useCallback(async () => {
     const res = await fetch('/api/visitors')
     if (res.ok) setVisitors(await res.json())
@@ -100,6 +105,29 @@ export default function AdminVisitorsPage() {
       body: JSON.stringify({ status }),
     })
     setVisitors((prev) => prev.map((v) => (v.id === id ? { ...v, status } : v)))
+  }
+
+  const handleDelete = async (v: Visitor) => {
+    if (!confirm(`Remove ${v.first_name} ${v.last_name}? This cannot be undone.`)) return
+    const res = await fetch(`/api/visitors/${v.id}`, { method: 'DELETE' })
+    if (res.ok) setVisitors((prev) => prev.filter((x) => x.id !== v.id))
+  }
+
+  const handleAddVisitor = async () => {
+    if (!addForm.first_name.trim() || !addForm.last_name.trim()) return
+    setAddSaving(true)
+    const res = await fetch('/api/visitors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(addForm),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setVisitors((prev) => [data, ...prev])
+      setAddModal(false)
+      setAddForm({ first_name: '', last_name: '', email: '', phone: '', company: '', business_type: '' })
+    }
+    setAddSaving(false)
   }
 
   const openDrawer = (v: Visitor) => {
@@ -166,7 +194,10 @@ export default function AdminVisitorsPage() {
               <p className="text-xs text-gray-500">Think Big St. Louis · {user?.email}</p>
             </div>
           </div>
-          <span className="text-sm text-gray-400">{visitors.length} total visitors</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-400">{visitors.length} total</span>
+            <button onClick={() => setAddModal(true)} className="btn-primary text-xs px-4 py-2">+ Add Visitor</button>
+          </div>
         </div>
       </header>
 
@@ -265,6 +296,12 @@ export default function AdminVisitorsPage() {
                         >
                           SMS
                         </button>
+                        <button
+                          onClick={() => handleDelete(v)}
+                          className="text-xs text-red-400 hover:text-red-300 transition-colors whitespace-nowrap"
+                        >
+                          Remove
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -337,6 +374,49 @@ export default function AdminVisitorsPage() {
               <button onClick={() => { setSmsModal(null); setSmsMessage('') }} className="btn-ghost px-4 py-2 text-sm">Cancel</button>
               <button onClick={handleSendSms} disabled={smsSending || !smsMessage.trim()} className="btn-primary px-4 py-2 text-sm disabled:opacity-60">
                 {smsSending ? 'Sending…' : 'Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Visitor Modal */}
+      {addModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-white mb-5">Add Visitor</h3>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">First Name *</label>
+                  <input className="input-field" value={addForm.first_name} onChange={(e) => setAddForm((f) => ({ ...f, first_name: e.target.value }))} placeholder="Jane" autoFocus />
+                </div>
+                <div>
+                  <label className="label">Last Name *</label>
+                  <input className="input-field" value={addForm.last_name} onChange={(e) => setAddForm((f) => ({ ...f, last_name: e.target.value }))} placeholder="Smith" />
+                </div>
+              </div>
+              <div>
+                <label className="label">Email</label>
+                <input className="input-field" type="email" value={addForm.email} onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))} placeholder="jane@example.com" />
+              </div>
+              <div>
+                <label className="label">Phone</label>
+                <input className="input-field" type="tel" value={addForm.phone} onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))} placeholder="(314) 555-0100" />
+              </div>
+              <div>
+                <label className="label">Company</label>
+                <input className="input-field" value={addForm.company} onChange={(e) => setAddForm((f) => ({ ...f, company: e.target.value }))} placeholder="Smith Consulting" />
+              </div>
+              <div>
+                <label className="label">Business Type</label>
+                <input className="input-field" value={addForm.business_type} onChange={(e) => setAddForm((f) => ({ ...f, business_type: e.target.value }))} placeholder="Financial Advisor" />
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end mt-5">
+              <button onClick={() => setAddModal(false)} className="btn-ghost px-4 py-2 text-sm">Cancel</button>
+              <button onClick={handleAddVisitor} disabled={addSaving || !addForm.first_name.trim() || !addForm.last_name.trim()} className="btn-primary px-5 py-2 text-sm disabled:opacity-60">
+                {addSaving ? 'Adding…' : 'Add Visitor'}
               </button>
             </div>
           </div>
