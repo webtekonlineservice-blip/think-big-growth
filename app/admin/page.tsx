@@ -94,14 +94,9 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false))
   }, [router])
 
-  const handleSignOut = async () => {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/')
-  }
-
   if (loading || !data) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <svg className="w-8 h-8 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
@@ -124,45 +119,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-white">Command Center</h1>
-            <p className="text-xs text-gray-500">Think Big St. Louis · {user?.email}</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <nav className="flex items-center gap-1">
-              {[
-                { label: 'Overview', href: '/admin' },
-                { label: 'Visitors', href: '/admin/visitors' },
-                { label: 'Members', href: '/admin/members' },
-                { label: 'Campaigns', href: '/admin/campaigns' },
-                { label: 'Outbound', href: '/admin/outbound' },
-                { label: 'Analytics', href: '/admin/analytics' },
-              ].map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                    link.href === '/admin'
-                      ? 'text-white bg-gray-800'
-                      : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                  }`}
-                >
-                  {link.label}
-                </a>
-              ))}
-            </nav>
-            <div className="w-px h-4 bg-gray-700" />
-            <button onClick={handleSignOut} className="text-sm text-gray-400 hover:text-white transition-colors">
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
-
+    <div className="min-h-screen">
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
 
         {/* Top stats row */}

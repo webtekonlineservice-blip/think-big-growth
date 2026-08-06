@@ -5,22 +5,31 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          // Primary — Webtek indigo (from logo "Web")
+          // Webtek Indigo (primary — your brand)
           indigo: '#4F46E5',
           'indigo-dark': '#3730A3',
           'indigo-light': '#818CF8',
-          // Accent — cyan for CTAs and highlights
+          // BNI Red (chapter identity)
+          red: '#CC0000',
+          'red-dark': '#990000',
+          'red-light': '#FF3333',
+          // Accent — warm gold (bridges BNI red + professional tone)
+          gold: '#D4A017',
+          'gold-dark': '#B8860B',
+          'gold-light': '#F0C040',
+          // Cyan (CTAs and highlights)
           cyan: '#06B6D4',
           'cyan-dark': '#0891B2',
-          // Legacy aliases so existing components don't break
+          // Legacy aliases (backward compat)
           blue: '#4F46E5',
           'blue-dark': '#3730A3',
-          orange: '#06B6D4',
-          'orange-dark': '#0891B2',
+          orange: '#CC0000',
+          'orange-dark': '#990000',
         },
       },
       backgroundImage: {
         'gradient-brand': 'linear-gradient(135deg, #4F46E5 0%, #06B6D4 100%)',
+        'gradient-bni': 'linear-gradient(135deg, #CC0000 0%, #990000 100%)',
       },
     },
   },

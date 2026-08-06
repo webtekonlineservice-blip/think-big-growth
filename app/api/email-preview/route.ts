@@ -89,22 +89,42 @@ function buildEmail(body: string, ctaText: string, ctaUrl: string, unsubLink: st
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0f1e;padding:40px 16px;">
 <tr><td align="center">
 <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;">
-  <tr><td style="background:#111827;border-radius:12px 12px 0 0;padding:24px 32px;border-bottom:1px solid #1f2937;">
-    <span style="display:inline-block;background:#4F46E5;color:#fff;font-weight:700;font-size:12px;padding:5px 10px;border-radius:6px;letter-spacing:.5px;">TB</span>
-    <span style="margin-left:10px;font-weight:600;font-size:15px;color:#f1f5f9;">Think Big St. Louis</span>
+  <!-- Red accent bar -->
+  <tr><td style="background:linear-gradient(135deg,#CC0000,#990000);border-radius:12px 12px 0 0;padding:4px;"></td></tr>
+  <!-- Header -->
+  <tr><td style="background:#111827;padding:24px 32px;border-bottom:1px solid #1f2937;">
+    <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td>
+        <span style="display:inline-block;background:#CC0000;color:#fff;font-weight:700;font-size:12px;padding:5px 10px;border-radius:6px;letter-spacing:.5px;">BNI</span>
+        <span style="margin-left:10px;font-weight:600;font-size:15px;color:#f1f5f9;">Think Big St. Louis</span>
+      </td>
+      <td align="right">
+        <span style="font-size:11px;color:#64748b;">Kirkwood, MO</span>
+      </td>
+    </tr></table>
   </td></tr>
-  <tr><td style="background:#111827;padding:32px;border-radius:0 0 12px 12px;">
+  <!-- Body -->
+  <tr><td style="background:#111827;padding:32px;">
     <p style="color:#e2e8f0;font-size:15px;line-height:1.7;margin:0 0 24px;white-space:pre-line;">${body}</p>
-    <a href="${ctaUrl}" style="display:inline-block;background:#4F46E5;color:#fff;font-weight:600;font-size:15px;padding:14px 28px;border-radius:8px;text-decoration:none;">${ctaText}</a>
+    <a href="${ctaUrl}" style="display:inline-block;background:#CC0000;color:#fff;font-weight:600;font-size:15px;padding:14px 28px;border-radius:8px;text-decoration:none;">${ctaText}</a>
     <p style="color:#64748b;font-size:13px;margin:28px 0 0;">
       We meet every Thursday at 11:30 AM at Mike Duffy's Pub & Grill in Kirkwood, MO. Free to visit — no commitment.
     </p>
   </td></tr>
-  <tr><td style="padding:20px 0 0;text-align:center;">
-    <p style="margin:0;font-size:11px;color:#475569;">
-      Think Big St. Louis · BNI Chapter · Kirkwood, MO<br/>
-      <a href="${unsubLink}" style="color:#64748b;text-decoration:underline;">Unsubscribe</a>
-    </p>
+  <!-- Footer -->
+  <tr><td style="background:#0d1117;border-radius:0 0 12px 12px;padding:20px 32px;">
+    <table width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td>
+        <p style="margin:0;font-size:11px;color:#475569;">
+          Think Big St. Louis · BNI Chapter · Kirkwood, MO<br/>
+          <a href="${unsubLink}" style="color:#64748b;text-decoration:underline;">Unsubscribe</a>
+        </p>
+      </td>
+      <td align="right">
+        <span style="font-size:10px;color:#374151;">Powered by </span>
+        <a href="https://webtek.ai" style="color:#4F46E5;text-decoration:none;font-size:11px;font-weight:600;">Webtek.ai</a>
+      </td>
+    </tr></table>
   </td></tr>
 </table>
 ${pixel}

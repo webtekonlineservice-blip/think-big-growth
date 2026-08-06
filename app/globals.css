@@ -5,37 +5,49 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 body {
-  background-color: #111827;
-  color: #ffffff;
+  background-color: #0a0f1e;
+  color: #f1f5f9;
   font-family: 'Inter', system-ui, sans-serif;
 }
 
 @layer components {
+  /* Primary CTA — BNI Red (chapter action) */
   .btn-primary {
-    @apply bg-brand-orange hover:bg-brand-orange-dark text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 inline-flex items-center gap-2;
+    @apply bg-brand-red hover:bg-brand-red-dark text-white font-semibold px-6 py-3 rounded-lg transition-all duration-200 inline-flex items-center gap-2 shadow-lg shadow-brand-red/20;
   }
 
+  /* Secondary CTA — Webtek Indigo (tech/platform) */
   .btn-secondary {
-    @apply bg-brand-blue hover:bg-brand-blue-dark text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 inline-flex items-center gap-2;
+    @apply bg-brand-indigo hover:bg-brand-indigo-dark text-white font-semibold px-6 py-3 rounded-lg transition-all duration-200 inline-flex items-center gap-2 shadow-lg shadow-brand-indigo/20;
   }
 
+  /* Ghost / outline */
   .btn-ghost {
-    @apply border border-white/20 hover:border-white/40 text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 inline-flex items-center gap-2 hover:bg-white/5;
+    @apply border border-white/20 hover:border-brand-red/60 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-200 inline-flex items-center gap-2 hover:bg-brand-red/10;
   }
 
+  /* Card */
   .card {
-    @apply bg-gray-800 border border-gray-700 rounded-xl p-6;
+    @apply bg-gray-900/80 border border-gray-700/60 rounded-xl p-6 backdrop-blur-sm;
   }
 
+  /* Input */
   .input-field {
-    @apply w-full bg-gray-700 border border-gray-600 text-white placeholder-gray-400 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-blue focus:border-transparent transition-all duration-200;
+    @apply w-full bg-gray-800/80 border border-gray-700 text-white placeholder-gray-500 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-brand-indigo focus:border-brand-indigo/50 transition-all duration-200;
   }
 
+  /* Label */
   .label {
     @apply block text-sm font-medium text-gray-300 mb-1.5;
   }
 
+  /* Stat card */
   .stat-card {
-    @apply bg-gray-800 border border-gray-700 rounded-xl p-6 flex flex-col gap-2;
+    @apply bg-gray-900/80 border border-gray-700/60 rounded-xl p-6 flex flex-col gap-2 backdrop-blur-sm;
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-red to-brand-gold;
   }
 }
