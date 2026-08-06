@@ -30,7 +30,12 @@ export default function MemberLoginPage() {
         return
       }
 
-      router.push('/member')
+      // Admins go to dashboard, members go to member page
+      if (data.user?.is_admin) {
+        router.push('/admin')
+      } else {
+        router.push('/member')
+      }
     } catch {
       setError('Login failed. Please try again.')
     } finally {
