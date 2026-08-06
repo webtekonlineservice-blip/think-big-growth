@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import Logo from '@/components/Logo'
+import VideoModal from '@/components/VideoModal'
 
 async function getCategories() {
   try {
@@ -114,9 +115,7 @@ export default function HomePage() {
             <Link href="/join" className="btn-primary text-base px-8 py-4">
               Request to Visit →
             </Link>
-            <a href="#about" className="btn-ghost text-base px-8 py-4">
-              Learn More
-            </a>
+            <VideoModal />
           </div>
         </div>
       </section>
