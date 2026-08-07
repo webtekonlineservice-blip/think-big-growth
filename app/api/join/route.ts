@@ -15,7 +15,8 @@ interface JoinPayload {
   company: string
   businessType: string
   referralSource: string
-  refCode?: string
+  visitDate: string
+  refCode: string
 }
 
 export async function POST(req: NextRequest) {
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
       referral_source: body.referralSource!.trim(),
       invited_by: invitedById,
       status: 'invited',
-      visit_date: null,
+      visit_date: body.visitDate ? new Date(body.visitDate) : null,
       notes: '',
     })
 
