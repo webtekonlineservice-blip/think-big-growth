@@ -35,6 +35,11 @@ export default function ProspectsBoard() {
   const [search, setSearch] = useState('')
 
   // CSV import
+  const [enriching, setEnriching] = useState(false)
+  const [enrichResult, setEnrichResult] = useState<{ enriched: number; failed: number; total: number } | null>(null)
+  const [enrichStats, setEnrichStats] = useState<{ needsEnrichment: number; hasEmail: number; total: number } | null>(null)
+
+  // CSV import
   const [csvData, setCsvData] = useState<Array<Record<string, string>>>([])
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null)
@@ -43,9 +48,10 @@ export default function ProspectsBoard() {
   const [draggedId, setDraggedId] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
-    const [campRes, prospRes] = await Promise.all([
+    const [campRes, prospRes, enrichRes] = await Promise.all([
       fetch('/api/prospects/campaigns'),
       fetch('/api/prospects?limit=100'),
+      fetch('/api/prospects/enrich'),
     ])
     if (campRes.ok) {
       const c = await campRes.json()
@@ -55,6 +61,9 @@ export default function ProspectsBoard() {
     if (prospRes.ok) {
       const d = await prospRes.json()
       setProspects(d.prospects)
+    }
+    if (enrichRes.ok) {
+      setEnrichStats(await enrichRes.json())
     }
   }, [selectedCampaign])
 
@@ -154,6 +163,27 @@ export default function ProspectsBoard() {
     })
   }
 
+  const handleEnrich = async () => {
+    if (!confirm(`Find emails for ${enrichStats?.needsEnrichment || 'all'} prospects with websites? This may take a few minutes.`)) return
+    setEnriching(true)
+    setEnrichResult(null)
+    const res = await fetch('/api/prospects/enrich', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ campaign_id: selectedCampaign || undefined, limit: 50 }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setEnrichResult(data)
+      // Refresh prospects
+      const r = await fetch(`/api/prospects?campaign_id=${selectedCampaign}&limit=200`)
+      if (r.ok) setProspects((await r.json()).prospects)
+      const er = await fetch('/api/prospects/enrich')
+      if (er.ok) setEnrichStats(await er.json())
+    }
+    setEnriching(false)
+  }
+
   const handleDelete = async (id: string) => {
     if (!confirm('Remove this prospect?')) return
     const res = await fetch(`/api/prospects/${id}`, { method: 'DELETE' })
@@ -195,6 +225,67 @@ export default function ProspectsBoard() {
           </button>
         </div>
       </div>
+
+      {/* Stats + Enrich bar */}
+      {enrichStats && (
+        <div className="flex items-center gap-4 p-4 bg-gray-900/60 border border-gray-700/50 rounded-xl">
+          <div className="flex items-center gap-6 flex-1 text-sm">
+            <div>
+              <span className="text-gray-400">Total: </span>
+              <span className="text-white font-semibold">{enrichStats.total}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">With email: </span>
+              <span className="text-green-400 font-semibold">{enrichStats.hasEmail}</span>
+            </div>
+            <div>
+              <span className="text-gray-400">Need email: </span>
+              <span className="text-brand-red font-semibold">{enrichStats.needsEnrichment}</span>
+            </div>
+            {enrichStats.total > 0 && (
+              <div className="flex-1 max-w-xs">
+                <div className="w-full bg-gray-700 rounded-full h-1.5">
+                  <div
+                    className="bg-green-400 h-1.5 rounded-full transition-all"
+                    style={{ width: `${Math.round((enrichStats.hasEmail / enrichStats.total) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  {Math.round((enrichStats.hasEmail / enrichStats.total) * 100)}% email coverage
+                </p>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={handleEnrich}
+            disabled={enriching || enrichStats.needsEnrichment === 0}
+            className="btn-primary text-xs px-4 py-2 disabled:opacity-50 flex items-center gap-2"
+          >
+            {enriching ? (
+              <>
+                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Enriching...
+              </>
+            ) : (
+              <>
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                Find {enrichStats.needsEnrichment} Emails
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {enrichResult && (
+        <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl px-5 py-3 text-sm">
+          ✓ Enrichment complete — found {enrichResult.enriched} emails, {enrichResult.failed} not found out of {enrichResult.total} prospects.
+        </div>
+      )}
 
       {/* Search + CSV import */}
       <div className="flex items-center gap-4">
