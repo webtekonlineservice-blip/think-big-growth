@@ -41,10 +41,8 @@ export async function POST(req: NextRequest) {
 
     const html = buildEmail(seq.body, seq.cta_text, ctaUrl, unsubLink, trackingPixel)
 
-    // Use Resend — in sandbox mode from address must be onboarding@resend.dev
-    const fromAddress = process.env.RESEND_API_KEY?.startsWith('re_')
-      ? 'Think Big St. Louis <onboarding@resend.dev>'
-      : 'Think Big St. Louis <noreply@thinkbig.webtek.ai>'
+    // Domain verified — send from our own domain
+    const fromAddress = 'Think Big St. Louis <noreply@thinkbig.webtek.ai>'
 
     const result = await resend.emails.send({
       from: fromAddress,
