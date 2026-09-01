@@ -64,25 +64,20 @@ export function buildMemberAnnouncement({ memberName, inviteCode, stats }: Membe
 <tr><td align="center">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 
-  <!-- Red accent bar -->
-  <tr><td style="background:linear-gradient(135deg,#CC0000,#990000);border-radius:14px 14px 0 0;height:6px;font-size:0;line-height:0;">&nbsp;</td></tr>
+  <!-- Flyer banner -->
+  <tr><td style="border-radius:14px 14px 0 0;overflow:hidden;font-size:0;line-height:0;">
+    <img src="${APP_URL}/stack-day.png" alt="BNI Think Big St. Louis — Visitor Day" width="600" style="display:block;width:100%;max-width:600px;height:auto;border-radius:14px 14px 0 0;" />
+  </td></tr>
 
   <!-- Hero -->
-  <tr><td style="background:#111827;padding:40px 40px 24px;">
-    <table width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td>
-        <span style="display:inline-block;background:#CC0000;color:#fff;font-weight:800;font-size:13px;padding:6px 12px;border-radius:7px;letter-spacing:.5px;">BNI</span>
-        <span style="margin-left:10px;font-weight:700;font-size:17px;color:#f1f5f9;vertical-align:middle;">Think Big St. Louis</span>
-      </td>
-    </tr></table>
-
-    <h1 style="margin:28px 0 12px;font-size:30px;font-weight:800;line-height:1.2;color:#ffffff;">
-      Hey ${firstName} — meet your<br/><span style="color:#CC0000;">chapter growth engine.</span>
+  <tr><td style="background:#111827;padding:36px 40px 24px;">
+    <h1 style="margin:0 0 12px;font-size:30px;font-weight:800;line-height:1.2;color:#ffffff;">
+      Hey ${firstName} — I built<br/>something for <span style="color:#CC0000;">our chapter.</span>
     </h1>
     <p style="margin:0;font-size:16px;line-height:1.6;color:#cbd5e1;">
-      We built a platform to grow Think Big St. Louis on autopilot — finding local businesses,
-      inviting them to visit, and tracking every referral back to the member who brought them in.
-      Here's what it's already doing.
+      I've been working on a platform to help grow Think Big St. Louis — it finds local businesses
+      in the professions we still need, invites them to visit, and follows up automatically.
+      Before we roll it out, I wanted to show you what it can do and see if you'd want in.
     </p>
   </td></tr>
 
