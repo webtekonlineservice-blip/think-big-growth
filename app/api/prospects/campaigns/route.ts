@@ -3,6 +3,7 @@ import { connectDB } from '@/lib/mongodb'
 import EmailCampaign from '@/lib/models/EmailCampaign'
 import { getSession } from '@/lib/auth'
 import { buildProfessionSequence } from '@/lib/emailSequences'
+import { buildStackDaySequence } from '@/lib/stackDaySequence'
 
 /**
  * GET /api/prospects/campaigns
@@ -50,8 +51,15 @@ export async function POST(req: NextRequest) {
     let { name, sequence } = body
     const { description, invite_code, batch_size, profession } = body
 
+    const { template } = body
+
+    // Special event template — Real Estate Stack Day
+    if (template === 'stack_day' && !sequence) {
+      name = name || 'Real Estate Stack Day — Sept 10'
+      sequence = buildStackDaySequence(invite_code || session.invite_code || 'patrick')
+    }
     // One-click mode: generate a full campaign from just a profession name
-    if (profession && !sequence) {
+    else if (profession && !sequence) {
       name = name || `${profession} Outreach`
       sequence = buildProfessionSequence(profession, invite_code || session.invite_code || 'patrick')
     }
