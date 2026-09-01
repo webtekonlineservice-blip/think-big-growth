@@ -47,11 +47,18 @@ export default function ProspectsBoard() {
   // Drag state
   const [draggedId, setDraggedId] = useState<string | null>(null)
 
+  // Open BNI seats (categories not yet filled by a member)
+  const [openCategories, setOpenCategories] = useState<string[]>([])
+
+  // One-click campaign creation
+  const [creatingCampaign, setCreatingCampaign] = useState<string | null>(null)
+
   const fetchData = useCallback(async () => {
-    const [campRes, prospRes, enrichRes] = await Promise.all([
+    const [campRes, prospRes, enrichRes, catRes] = await Promise.all([
       fetch('/api/prospects/campaigns'),
       fetch('/api/prospects?limit=100'),
       fetch('/api/prospects/enrich'),
+      fetch('/api/categories'),
     ])
     if (campRes.ok) {
       const c = await campRes.json()
@@ -65,7 +72,21 @@ export default function ProspectsBoard() {
     if (enrichRes.ok) {
       setEnrichStats(await enrichRes.json())
     }
+    if (catRes.ok) {
+      const { openCategories: open } = await catRes.json()
+      setOpenCategories(open || [])
+    }
   }, [selectedCampaign])
+
+  // Check if a profession matches an open BNI seat
+  const isOpenSeat = useCallback((profession: string): boolean => {
+    if (!profession) return false
+    const p = profession.toLowerCase()
+    return openCategories.some((cat) => {
+      const c = cat.toLowerCase()
+      return c.includes(p) || p.includes(c.split(' / ')[0]) || p.includes(c.split(' ')[0])
+    })
+  }, [openCategories])
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -188,6 +209,27 @@ export default function ProspectsBoard() {
     if (!confirm('Remove this prospect?')) return
     const res = await fetch(`/api/prospects/${id}`, { method: 'DELETE' })
     if (res.ok) setProspects((prev) => prev.filter((p) => p.id !== id))
+  }
+
+  const handleCreateCampaign = async (profession: string) => {
+    if (!confirm(`Create a 3-email drip campaign for "${profession}"?\n\nThis generates tailored emails linking to your invite code.`)) return
+    setCreatingCampaign(profession)
+    const res = await fetch('/api/prospects/campaigns', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profession }),
+    })
+    if (res.ok) {
+      const camp = await res.json()
+      // Refresh campaigns and switch to the new one
+      const cr = await fetch('/api/prospects/campaigns')
+      if (cr.ok) setCampaigns(await cr.json())
+      setSelectedCampaign(camp.id)
+      alert(`Campaign "${camp.name}" created with ${camp.sequence_count} emails. Now assign prospects to it.`)
+    } else {
+      alert('Failed to create campaign.')
+    }
+    setCreatingCampaign(null)
   }
 
   if (loading) {
@@ -333,11 +375,32 @@ export default function ProspectsBoard() {
               onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-brand-red/50'); handleDrop(cat.name) }}
             >
               {/* Column header */}
-              <div className="px-4 py-3 border-b border-gray-700/50 bg-gray-800/50">
-                <div className="flex items-center justify-between">
+              <div className={`px-4 py-3 border-b border-gray-700/50 ${isOpenSeat(cat.name) ? 'bg-green-500/10' : 'bg-gray-800/50'}`}>
+                <div className="flex items-center justify-between mb-1">
                   <h3 className="text-sm font-semibold text-white truncate">{cat.name || 'Uncategorized'}</h3>
                   <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded-full">{cat.prospects.length}</span>
                 </div>
+                {cat.name && cat.name !== 'Uncategorized' && (
+                  <div className="flex items-center justify-between gap-2">
+                    {isOpenSeat(cat.name) ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-400 uppercase tracking-wide">
+                        <span className="w-1.5 h-1.5 bg-green-400 rounded-full" /> Open Seat — Target!
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-gray-600 uppercase tracking-wide">
+                        <span className="w-1.5 h-1.5 bg-gray-600 rounded-full" /> Seat Filled
+                      </span>
+                    )}
+                    <button
+                      onClick={() => handleCreateCampaign(cat.name)}
+                      disabled={creatingCampaign === cat.name}
+                      className="text-[10px] text-brand-indigo-light hover:text-white transition-colors whitespace-nowrap disabled:opacity-50"
+                      title={`Create a drip campaign for ${cat.name}`}
+                    >
+                      {creatingCampaign === cat.name ? 'Creating…' : '+ Campaign'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Cards */}

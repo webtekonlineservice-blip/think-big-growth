@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
 import EmailCampaign from '@/lib/models/EmailCampaign'
 import { getSession } from '@/lib/auth'
+import { buildProfessionSequence } from '@/lib/emailSequences'
 
 /**
  * GET /api/prospects/campaigns
@@ -46,7 +47,14 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { name, description, invite_code, sequence, batch_size } = body
+    let { name, sequence } = body
+    const { description, invite_code, batch_size, profession } = body
+
+    // One-click mode: generate a full campaign from just a profession name
+    if (profession && !sequence) {
+      name = name || `${profession} Outreach`
+      sequence = buildProfessionSequence(profession, invite_code || session.invite_code || 'patrick')
+    }
 
     if (!name?.trim()) return NextResponse.json({ error: 'Campaign name is required.' }, { status: 400 })
     if (!sequence?.length) return NextResponse.json({ error: 'At least one sequence step is required.' }, { status: 400 })
@@ -55,8 +63,8 @@ export async function POST(req: NextRequest) {
 
     const campaign = await EmailCampaign.create({
       name: name.trim(),
-      description: description?.trim() ?? '',
-      invite_code: invite_code?.trim() ?? 'patrick',
+      description: description?.trim() ?? (profession ? `Auto-generated outreach for ${profession}` : ''),
+      invite_code: invite_code?.trim() ?? session.invite_code ?? 'patrick',
       sequence,
       batch_size: batch_size ?? 10,
     })
