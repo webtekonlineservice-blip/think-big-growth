@@ -2,7 +2,7 @@ import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-const FROM = 'Think Big St. Louis <noreply@thinkbig.webtek.ai>'
+const FROM = 'Think Big St. Louis <noreply@webtek.ai>'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thinkbig.webtek.ai'
 
 // ─── Shared HTML layout ───────────────────────────────────────────────────────

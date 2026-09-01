@@ -41,8 +41,8 @@ export async function POST(req: NextRequest) {
 
     const html = buildEmail(seq.body, seq.cta_text, ctaUrl, unsubLink, trackingPixel)
 
-    // Domain verified — send from our own domain
-    const fromAddress = 'Think Big St. Louis <noreply@thinkbig.webtek.ai>'
+    // webtek.ai domain verified in Resend
+    const fromAddress = 'Think Big St. Louis <noreply@webtek.ai>'
 
     const result = await resend.emails.send({
       from: fromAddress,
