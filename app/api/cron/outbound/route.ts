@@ -3,6 +3,7 @@ import { connectDB } from '@/lib/mongodb'
 import Prospect from '@/lib/models/Prospect'
 import EmailCampaign from '@/lib/models/EmailCampaign'
 import ProspectEvent from '@/lib/models/ProspectEvent'
+import Member from '@/lib/models/Member'
 import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
@@ -23,13 +24,36 @@ export async function GET(req: NextRequest) {
   try {
     await connectDB()
 
+    // Determine which BNI seats are already filled by members —
+    // we pause outreach for those professions automatically.
+    const members = await Member.find({ role: { $ne: '' } }).select('role').lean()
+    const filledRoles = members
+      .map((m) => (m.role || '').toLowerCase().trim())
+      .filter(Boolean)
+
+    const isSeatFilled = (profession: string): boolean => {
+      if (!profession) return false
+      const p = profession.toLowerCase()
+      return filledRoles.some((role) =>
+        p.includes(role) || role.includes(p) ||
+        p.split(' ')[0] === role.split(' ')[0]
+      )
+    }
+
     const campaigns = await EmailCampaign.find({ active: true }).lean()
-    const results: Array<{ campaign: string; sent: number; errors: number }> = []
+    const results: Array<{ campaign: string; sent: number; errors: number; skipped?: string }> = []
 
     for (const campaign of campaigns) {
       const maxStep = campaign.sequence.length
       let sent = 0
       let errors = 0
+
+      // Guard: skip campaigns whose profession seat is already filled
+      const campaignProfession = campaign.name.replace(/\s*outreach\s*/i, '').trim()
+      if (isSeatFilled(campaignProfession)) {
+        results.push({ campaign: campaign.name, sent: 0, errors: 0, skipped: 'seat_filled' })
+        continue
+      }
 
       // Find prospects ready for next email
       // Conditions: not unsubscribed, sequence_step < maxStep, has real email, enough days passed
