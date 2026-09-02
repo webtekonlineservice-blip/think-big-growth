@@ -29,6 +29,13 @@ interface DashboardData {
   conversionRate: number
   prospects: number
   campaigns: Campaign[]
+  breakdown: {
+    total: number
+    withEmail: number
+    emailCoverage: number
+    byProfession: { name: string; count: number }[]
+    bySource: { name: string; count: number }[]
+  } | null
   recentVisitors: Array<{
     id: string
     first_name: string
@@ -54,17 +61,19 @@ export default function AdminDashboard() {
         setUser(u)
 
         // Fetch all dashboard data in parallel
-        const [membersRes, visitorsRes, campaignsRes, prospectsRes] = await Promise.all([
+        const [membersRes, visitorsRes, campaignsRes, prospectsRes, breakdownRes] = await Promise.all([
           fetch('/api/members'),
           fetch('/api/visitors'),
           fetch('/api/prospects/campaigns'),
           fetch('/api/prospects?limit=1'),
+          fetch('/api/prospects/breakdown'),
         ])
 
         const members = membersRes.ok ? await membersRes.json() : []
         const visitors = visitorsRes.ok ? await visitorsRes.json() : []
         const campaigns = campaignsRes.ok ? await campaignsRes.json() : []
         const prospectsData = prospectsRes.ok ? await prospectsRes.json() : { total: 0 }
+        const breakdown = breakdownRes.ok ? await breakdownRes.json() : null
 
         const now = new Date()
         const thisMonth = visitors.filter((v: { created_at: string }) => {
@@ -80,6 +89,7 @@ export default function AdminDashboard() {
           conversionRate: visitors.length > 0 ? Math.round((converted / visitors.length) * 100) : 0,
           prospects: prospectsData.total ?? 0,
           campaigns,
+          breakdown,
           recentVisitors: visitors.slice(0, 5).map((v: { id: string; first_name: string; last_name: string; company: string; status: string; created_at: string }) => ({
             id: v.id,
             first_name: v.first_name,
@@ -150,6 +160,70 @@ export default function AdminDashboard() {
             <p className="text-xs text-gray-500">{openRate}% open · {clickRate}% click</p>
           </div>
         </div>
+
+        {/* Data Being Collected */}
+        {data.breakdown && data.breakdown.total > 0 && (
+          <div className="card">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  Data Being Collected
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {data.breakdown.total} businesses captured · {data.breakdown.withEmail} with emails ({data.breakdown.emailCoverage}% coverage)
+                </p>
+              </div>
+              <a href="/admin/prospects" className="text-xs text-brand-blue hover:text-white transition-colors">Manage →</a>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* By profession */}
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold mb-3">By Profession</p>
+                <div className="space-y-2">
+                  {data.breakdown.byProfession.slice(0, 8).map((p) => {
+                    const pct = Math.round((p.count / data.breakdown!.total) * 100)
+                    return (
+                      <div key={p.name}>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-gray-300 truncate">{p.name}</span>
+                          <span className="text-gray-500 font-medium ml-2">{p.count}</span>
+                        </div>
+                        <div className="w-full bg-gray-800 rounded-full h-1.5">
+                          <div className="bg-brand-red h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* By source + email coverage */}
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold mb-3">By Source</p>
+                <div className="space-y-2 mb-6">
+                  {data.breakdown.bySource.map((s) => (
+                    <div key={s.name} className="flex items-center justify-between p-2 bg-gray-900/50 rounded-lg border border-gray-700/50">
+                      <span className="text-xs text-gray-300 capitalize">{s.name.replace(/_/g, ' ')}</span>
+                      <span className="text-xs text-white font-semibold">{s.count}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Email coverage donut-ish bar */}
+                <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold mb-2">Email Coverage</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 bg-gray-800 rounded-full h-3">
+                    <div className="bg-green-400 h-3 rounded-full transition-all" style={{ width: `${data.breakdown.emailCoverage}%` }} />
+                  </div>
+                  <span className="text-sm font-bold text-green-400">{data.breakdown.emailCoverage}%</span>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">{data.breakdown.withEmail} of {data.breakdown.total} have contact emails</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Two-column layout */}
         <div className="grid md:grid-cols-2 gap-6">
