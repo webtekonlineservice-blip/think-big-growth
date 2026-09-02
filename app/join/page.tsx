@@ -149,6 +149,30 @@ function JoinForm() {
             </ul>
           </div>
 
+          {/* Official BNI registration — the final step */}
+          <div className="card mb-8 text-left border-brand-red/30 bg-gradient-to-br from-brand-red/5 to-transparent">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-brand-red/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-brand-red font-bold text-xs">1</span>
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-white mb-1">One quick final step</h2>
+                <p className="text-sm text-gray-400 mb-4">
+                  Complete your official BNI visitor registration so the chapter has everything
+                  ready when you arrive. Takes about 60 seconds.
+                </p>
+                <a
+                  href="https://bnimidamerica.com/en-US/visitorregistration?chapterId=11708"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary text-sm px-5 py-2.5"
+                >
+                  Complete BNI Registration →
+                </a>
+              </div>
+            </div>
+          </div>
+
           <Link href="/" className="btn-ghost">
             ← Back to Home
           </Link>

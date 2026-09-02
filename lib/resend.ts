@@ -99,6 +99,15 @@ export async function sendWelcomeEmail({
     <p style="color:#d1d5db;font-size:15px;line-height:1.6;margin:0 0 24px;">
       Guests can visit <strong>twice at no cost</strong> before deciding to apply for membership.
     </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#1a1a2e;border:1px solid rgba(204,0,0,0.3);border-radius:10px;margin:0 0 24px;">
+      <tr><td style="padding:20px;">
+        <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#f87171;text-transform:uppercase;letter-spacing:.5px;">One Final Step</p>
+        <p style="margin:0 0 14px;font-size:14px;color:#d1d5db;line-height:1.5;">
+          Please complete your official BNI visitor registration so we have everything ready when you arrive:
+        </p>
+        <a href="https://bnimidamerica.com/en-US/visitorregistration?chapterId=11708" style="display:inline-block;background:#CC0000;color:#fff;font-weight:600;font-size:14px;padding:12px 24px;border-radius:8px;text-decoration:none;">Complete BNI Registration →</a>
+      </td></tr>
+    </table>
     ${btn('View Chapter Info →', APP_URL)}
     <p style="color:#6b7280;font-size:13px;margin:24px 0 0;">Questions? Reply to this email anytime.</p>
   `)
