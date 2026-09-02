@@ -25,6 +25,13 @@ const STEP_LABELS: Record<string, string> = {
   sequence_3: 'Outbound Email 3 — Close',
 }
 
+const TYPE_LABELS: Record<string, string> = {
+  visitor_outreach: 'Visitor automation',
+  prospect_campaign: 'Outbound campaign',
+  member_announcement: 'Member announcement',
+  test_email: 'Test email',
+}
+
 const CHANNEL_STYLES: Record<string, string> = {
   sms: 'bg-green-500/15 text-green-400 border-green-500/30',
   email: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
