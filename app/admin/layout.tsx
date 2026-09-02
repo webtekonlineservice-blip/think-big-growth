@@ -7,7 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import {
   LayoutDashboard, Users, UserCircle, Send, Mail,
-  FlaskConical, BarChart3, ScrollText, Target, LogOut, Menu,
+  FlaskConical, BarChart3, ScrollText, Target, LogOut, Menu, Megaphone,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { label: 'Prospects', href: '/admin/prospects', Icon: Target },
   { label: 'Outbound', href: '/admin/outbound', Icon: Send },
   { label: 'Campaigns', href: '/admin/campaigns', Icon: Mail },
+  { label: 'Announce', href: '/admin/announce', Icon: Megaphone },
   { label: 'Email Test', href: '/admin/email-test', Icon: FlaskConical },
   { label: 'Analytics', href: '/admin/analytics', Icon: BarChart3 },
   { label: 'Send Log', href: '/admin/send-log', Icon: ScrollText },

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 
 interface LogEntry {
   id: string
-  type: 'visitor_outreach' | 'prospect_campaign'
+  type: 'visitor_outreach' | 'prospect_campaign' | 'member_announcement' | 'test_email'
   channel: 'sms' | 'email'
   step: string
   to: string
@@ -119,13 +119,7 @@ export default function SendLogPage() {
                   </td>
                   <td className="px-4 py-3">
                     <p className="text-white text-sm font-medium">{STEP_LABELS[log.step] || log.step}</p>
-                    <p className="text-gray-600 text-xs">
-                      {log.type === 'visitor_outreach' ? 'Visitor automation'
-                        : log.type === 'prospect_campaign' ? 'Outbound campaign'
-                        : log.type === 'member_announcement' ? 'Member announcement'
-                        : log.type === 'test_email' ? 'Test email'
-                        : 'Email'}
-                    </p>
+                    <p className="text-gray-600 text-xs">{TYPE_LABELS[log.type] || 'Email'}</p>
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-xs font-mono">{log.to}</td>
                   <td className="px-4 pr-6 py-3">
