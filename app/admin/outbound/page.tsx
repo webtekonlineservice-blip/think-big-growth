@@ -68,6 +68,11 @@ export default function AdminOutboundPage() {
   const [prospects, setProspects] = useState<ProspectRow[]>([])
   const [selectedCampaign, setSelectedCampaign] = useState<string | null>(null)
 
+  // Batch controls
+  const [batchSize, setBatchSize] = useState(10)
+  const [sendingBatch, setSendingBatch] = useState(false)
+  const [batchResult, setBatchResult] = useState<string | null>(null)
+
   // Create campaign modal
   const [showCreate, setShowCreate] = useState(false)
   const [newName, setNewName] = useState('')
@@ -146,6 +151,43 @@ export default function AdminOutboundPage() {
       setImportResult(null)
     }
     reader.readAsText(file)
+  }
+
+  // Sync batch size when campaign changes
+  useEffect(() => {
+    const c = campaigns.find((x) => x.id === selectedCampaign)
+    if (c) setBatchSize(c.batch_size || 10)
+  }, [selectedCampaign, campaigns])
+
+  const saveBatchSize = async () => {
+    if (!selectedCampaign) return
+    await fetch(`/api/prospects/campaigns/${selectedCampaign}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ batch_size: batchSize }),
+    })
+  }
+
+  const sendNextBatch = async () => {
+    if (!selectedCampaign) return
+    if (!confirm(`Send the next batch of up to ${batchSize} emails now?`)) return
+    setSendingBatch(true)
+    setBatchResult(null)
+    try {
+      const res = await fetch(`/api/prospects/campaigns/${selectedCampaign}/send`, { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setBatchResult(`Sent ${data.sent} emails. Refresh to see updated stats.`)
+        // Refresh campaigns
+        const cr = await fetch('/api/prospects/campaigns')
+        if (cr.ok) setCampaigns(await cr.json())
+      } else {
+        setBatchResult(data.error || 'Send failed.')
+      }
+    } catch {
+      setBatchResult('Network error.')
+    }
+    setSendingBatch(false)
   }
 
   const handleImport = async () => {
@@ -255,6 +297,41 @@ export default function AdminOutboundPage() {
                     <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Batch controls */}
+            {activeCampaign && (
+              <div className="card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div>
+                    <label className="text-xs text-gray-400 uppercase tracking-wide font-semibold block mb-1">Emails per day</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={batchSize}
+                      onChange={(e) => setBatchSize(parseInt(e.target.value) || 10)}
+                      onBlur={saveBatchSize}
+                      className="input-field w-24 py-2 text-sm"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 max-w-xs">
+                    The daily cron sends this many emails automatically. Keep it low (10-25) to protect deliverability.
+                  </p>
+                </div>
+                <button
+                  onClick={sendNextBatch}
+                  disabled={sendingBatch}
+                  className="btn-primary text-sm px-5 py-2.5 disabled:opacity-50 whitespace-nowrap"
+                >
+                  {sendingBatch ? 'Sending…' : 'Send Next Batch Now →'}
+                </button>
+              </div>
+            )}
+            {batchResult && (
+              <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg px-4 py-3 text-sm">
+                {batchResult}
               </div>
             )}
 
