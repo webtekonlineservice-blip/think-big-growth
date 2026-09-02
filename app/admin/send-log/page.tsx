@@ -113,7 +113,11 @@ export default function SendLogPage() {
                   <td className="px-4 py-3">
                     <p className="text-white text-sm font-medium">{STEP_LABELS[log.step] || log.step}</p>
                     <p className="text-gray-600 text-xs">
-                      {log.type === 'visitor_outreach' ? 'Visitor automation' : 'Outbound campaign'}
+                      {log.type === 'visitor_outreach' ? 'Visitor automation'
+                        : log.type === 'prospect_campaign' ? 'Outbound campaign'
+                        : log.type === 'member_announcement' ? 'Member announcement'
+                        : log.type === 'test_email' ? 'Test email'
+                        : 'Email'}
                     </p>
                   </td>
                   <td className="px-4 py-3 text-gray-400 text-xs font-mono">{log.to}</td>
