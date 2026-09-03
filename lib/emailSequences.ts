@@ -10,6 +10,7 @@ export interface SequenceStep {
   delay_days: number
   cta_text: string
   cta_url: string
+  image_url?: string
 }
 
 const APP_URL = 'https://thinkbig.webtek.ai'

@@ -7,6 +7,7 @@ export interface EmailSequenceStep {
   delay_days: number    // days after previous email (0 for first)
   cta_text?: string
   cta_url?: string
+  image_url?: string    // optional hero image (e.g. event flyer) shown above the body
 }
 
 export interface IEmailCampaign extends Document {
@@ -32,6 +33,7 @@ const EmailSequenceStepSchema = new Schema<EmailSequenceStep>(
     delay_days: { type: Number, default: 0 },
     cta_text: { type: String },
     cta_url: { type: String },
+    image_url: { type: String },
   },
   { _id: false }
 )
