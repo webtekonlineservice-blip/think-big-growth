@@ -5,7 +5,17 @@ import ProspectEvent from '@/lib/models/ProspectEvent'
 import Member from '@/lib/models/Member'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Lazily construct so a missing RESEND_API_KEY never throws at module load
+// (which would break `next build` page-data collection). Key is only needed
+// when actually sending.
+let _resend: Resend | null = null
+function getResend(): Resend {
+  if (_resend) return _resend
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error('RESEND_API_KEY is not set.')
+  _resend = new Resend(apiKey)
+  return _resend
+}
 const FROM = 'Think Big St. Louis <noreply@webtek.ai>'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thinkbig.webtek.ai'
 
@@ -142,7 +152,7 @@ export async function runOutbound(options: RunOutboundOptions = {}): Promise<Run
       const html = buildEmail(body, ctaText, ctaUrl, unsubLink, trackingPixel, imageUrl)
 
       try {
-        await resend.emails.send({ from: FROM, to: prospect.email, subject, html })
+        await getResend().emails.send({ from: FROM, to: prospect.email, subject, html })
 
         // Update prospect
         await Prospect.findByIdAndUpdate(prospect._id, {

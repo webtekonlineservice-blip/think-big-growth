@@ -1,6 +1,16 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+// Lazily construct the Resend client so a missing RESEND_API_KEY never throws
+// at module-load time (which breaks `next build`'s page-data collection).
+// The key is only required when an email is actually sent.
+let _resend: Resend | null = null
+function getResend(): Resend {
+  if (_resend) return _resend
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error('RESEND_API_KEY is not set.')
+  _resend = new Resend(apiKey)
+  return _resend
+}
 
 const FROM = 'Think Big St. Louis <noreply@webtek.ai>'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thinkbig.webtek.ai'
@@ -112,7 +122,7 @@ export async function sendWelcomeEmail({
     <p style="color:#6b7280;font-size:13px;margin:24px 0 0;">Questions? Reply to this email anytime.</p>
   `)
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to,
     subject: `You're registered to visit Think Big St. Louis, ${firstName}!`,
@@ -157,7 +167,7 @@ export async function sendApplicationReminderEmail({
     <p style="color:#6b7280;font-size:13px;margin:24px 0 0;">Not ready yet? You're always welcome to visit again.</p>
   `)
 
-  return resend.emails.send({
+  return getResend().emails.send({
     from: FROM,
     to,
     subject: `${firstName}, your BNI membership spot may still be open`,
@@ -187,5 +197,5 @@ export async function sendCustomEmail({
     ${cta}
   `)
 
-  return resend.emails.send({ from: FROM, to, subject, html })
+  return getResend().emails.send({ from: FROM, to, subject, html })
 }
