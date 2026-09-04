@@ -3,7 +3,14 @@ import { getSession } from '@/lib/auth'
 import { buildMemberAnnouncement } from '@/lib/memberAnnouncement'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+let _resend: Resend | null = null
+function getResend(): Resend {
+  if (_resend) return _resend
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error('RESEND_API_KEY is not set.')
+  _resend = new Resend(apiKey)
+  return _resend
+}
 const FROM = 'Think Big St. Louis <noreply@webtek.ai>'
 
 /**
@@ -29,7 +36,7 @@ export async function POST(req: NextRequest) {
       inviteCode: invite_code || session.invite_code || 'patrick',
     })
 
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: FROM,
       to: to.trim(),
       subject: `${member_name ? member_name.split(' ')[0] + ', ' : ''}I built something for our chapter`,

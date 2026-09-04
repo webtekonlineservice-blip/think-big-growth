@@ -37,8 +37,9 @@ except ImportError:
 import requests
 
 API_URL = os.getenv('NEXT_PUBLIC_APP_URL', 'https://thinkbig.webtek.ai').rstrip('/')
-EMAIL = os.getenv('THINKBIG_EMAIL', 'theplebjd@proton.me')
-PASSWORD = os.getenv('THINKBIG_PASSWORD', '123456')
+# Credentials must come from the environment (.env.local) — never hardcoded.
+EMAIL = os.getenv('THINKBIG_EMAIL')
+PASSWORD = os.getenv('THINKBIG_PASSWORD')
 
 IGNORE = ['placeholder', 'example.com', 'sentry', 'schema.org', 'w3.org',
           'wix', 'squarespace', 'wordpress', 'jquery', '.png', '.jpg', '.gif',
@@ -194,6 +195,13 @@ def main():
     parser.add_argument('--password', default=PASSWORD)
     parser.add_argument('--no-enrich', action='store_true')
     args = parser.parse_args()
+
+    # Require credentials from env or flags — never fall back to hardcoded values.
+    if not args.email or not args.password:
+        log('ERROR: admin credentials required.')
+        log('  Set THINKBIG_EMAIL and THINKBIG_PASSWORD in .env.local,')
+        log('  or pass --email and --password on the command line.')
+        sys.exit(1)
 
     # Infer profession from query if not given (first word before "in")
     profession = args.profession

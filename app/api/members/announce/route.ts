@@ -7,7 +7,14 @@ import { getSession } from '@/lib/auth'
 import { buildMemberAnnouncement } from '@/lib/memberAnnouncement'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+let _resend: Resend | null = null
+function getResend(): Resend {
+  if (_resend) return _resend
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error('RESEND_API_KEY is not set.')
+  _resend = new Resend(apiKey)
+  return _resend
+}
 const FROM = 'Patrick @ Think Big St. Louis <noreply@webtek.ai>'
 const SUBJECT = "I built something for our chapter — take a look"
 
@@ -32,7 +39,7 @@ export async function POST(req: NextRequest) {
         memberName: session.name || 'Patrick',
         inviteCode: session.invite_code || 'patrick',
       })
-      const result = await resend.emails.send({ from: FROM, to, subject: `[TEST] ${SUBJECT}`, html })
+      const result = await getResend().emails.send({ from: FROM, to, subject: `[TEST] ${SUBJECT}`, html })
 
       await SentEmail.create({
         type: 'test',
@@ -65,7 +72,7 @@ export async function POST(req: NextRequest) {
         let resendId: string | undefined
 
         try {
-          const result = await resend.emails.send({ from: FROM, to: m.email, subject: SUBJECT, html })
+          const result = await getResend().emails.send({ from: FROM, to: m.email, subject: SUBJECT, html })
           if (result.error) { status = 'failed'; error = result.error.message }
           else { resendId = result.data?.id; sent++ }
           if (status === 'failed') failed++

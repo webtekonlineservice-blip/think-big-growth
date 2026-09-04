@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+let _resend: Resend | null = null
+function getResend(): Resend {
+  if (_resend) return _resend
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) throw new Error('RESEND_API_KEY is not set.')
+  _resend = new Resend(apiKey)
+  return _resend
+}
 const APP_URL = 'https://thinkbig.webtek.ai'
 
 /**
@@ -44,7 +51,7 @@ export async function POST(req: NextRequest) {
     // webtek.ai domain verified in Resend
     const fromAddress = 'Think Big St. Louis <noreply@webtek.ai>'
 
-    const result = await resend.emails.send({
+    const result = await getResend().emails.send({
       from: fromAddress,
       to: to.trim(),
       subject: `[TEST] ${seq.subject}`,
