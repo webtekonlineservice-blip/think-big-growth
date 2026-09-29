@@ -393,7 +393,18 @@ export default function AdminDashboard() {
         </div>
 
         {/* Quick actions */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <a href="/admin/seats" className="card flex items-center gap-3 hover:border-green-500/40 transition-colors cursor-pointer py-4">
+            <div className="w-9 h-9 bg-green-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-white font-medium text-sm">Manage Seats</p>
+              <p className="text-gray-500 text-xs">Toggle outreach per seat</p>
+            </div>
+          </a>
           <a href="/admin/outbound" className="card flex items-center gap-3 hover:border-brand-blue/40 transition-colors cursor-pointer py-4">
             <div className="w-9 h-9 bg-brand-blue/20 rounded-lg flex items-center justify-center flex-shrink-0">
               <svg className="w-4 h-4 text-brand-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">

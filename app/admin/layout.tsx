@@ -1,5 +1,4 @@
 'use client'
-'use client'
 
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
@@ -7,13 +6,14 @@ import Link from 'next/link'
 import Image from 'next/image'
 import {
   LayoutDashboard, Users, UserCircle, Send, Mail,
-  FlaskConical, BarChart3, ScrollText, Target, LogOut, Menu, Megaphone,
+  FlaskConical, BarChart3, ScrollText, Target, LogOut, Menu, Megaphone, CheckSquare,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/admin', Icon: LayoutDashboard },
   { label: 'Visitors', href: '/admin/visitors', Icon: Users },
   { label: 'Members', href: '/admin/members', Icon: UserCircle },
+  { label: 'Seats', href: '/admin/seats', Icon: CheckSquare },
   { label: 'Prospects', href: '/admin/prospects', Icon: Target },
   { label: 'Outbound', href: '/admin/outbound', Icon: Send },
   { label: 'Campaigns', href: '/admin/campaigns', Icon: Mail },

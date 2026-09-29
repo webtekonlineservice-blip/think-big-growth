@@ -4,6 +4,7 @@ import EmailCampaign from '@/lib/models/EmailCampaign'
 import ProspectEvent from '@/lib/models/ProspectEvent'
 import Member from '@/lib/models/Member'
 import { Resend } from 'resend'
+import { isSeatFilledByMembers } from '@/lib/seatAliases'
 
 // Lazily construct so a missing RESEND_API_KEY never throws at module load
 // (which would break `next build` page-data collection). Key is only needed
@@ -63,14 +64,8 @@ export async function runOutbound(options: RunOutboundOptions = {}): Promise<Run
     .map((m) => (m.role || '').toLowerCase().trim())
     .filter(Boolean)
 
-  const isSeatFilled = (prof: string): boolean => {
-    if (!prof) return false
-    const p = prof.toLowerCase()
-    return filledRoles.some((role) =>
-      p.includes(role) || role.includes(p) ||
-      p.split(' ')[0] === role.split(' ')[0]
-    )
-  }
+  const isSeatFilled = (prof: string): boolean =>
+    isSeatFilledByMembers(prof, filledRoles)
 
   const campaignQuery: Record<string, unknown> = { active: true }
   if (campaignId) campaignQuery._id = campaignId
