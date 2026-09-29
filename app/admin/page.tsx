@@ -22,6 +22,60 @@ interface Campaign {
   active: boolean
 }
 
+// ─── Outbound Drip toggle tile ────────────────────────────────────────────────
+function AutomationToggle({
+  campaigns,
+  onToggle,
+}: {
+  campaigns: Campaign[]
+  onToggle: (id: string, active: boolean) => Promise<void>
+}) {
+  const [toggling, setToggling] = useState<string | null>(null)
+  const active = campaigns.filter((c) => c.active)
+
+  const handleToggle = async (id: string, current: boolean) => {
+    setToggling(id)
+    await onToggle(id, !current)
+    setToggling(null)
+  }
+
+  return (
+    <div className="p-4 bg-gray-900/50 rounded-lg border border-gray-700/50">
+      <div className="flex items-center gap-2 mb-3">
+        <span className={`w-2.5 h-2.5 rounded-full ${active.length > 0 ? 'bg-green-400 animate-pulse' : 'bg-gray-600'}`} />
+        <p className="text-sm font-medium text-white">Outbound Drip</p>
+        <span className="ml-auto text-xs text-gray-500">{active.length} active</span>
+      </div>
+      {campaigns.length === 0 ? (
+        <p className="text-xs text-gray-500">No campaigns yet.</p>
+      ) : (
+        <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+          {campaigns.map((c) => (
+            <div key={c.id} className="flex items-center justify-between gap-2">
+              <span className="text-xs text-gray-300 truncate flex-1" title={c.name}>{c.name}</span>
+              <button
+                onClick={() => handleToggle(c.id, c.active)}
+                disabled={toggling === c.id}
+                title={c.active ? 'Pause' : 'Resume'}
+                className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+                  c.active ? 'bg-green-500' : 'bg-gray-600'
+                }`}
+              >
+                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
+                  c.active ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                }`} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <a href="/admin/outbound" className="text-xs text-brand-blue hover:text-white transition-colors mt-3 block">
+        Manage campaigns →
+      </a>
+    </div>
+  )
+}
+
 interface DashboardData {
   members: number
   visitors: number
@@ -309,16 +363,22 @@ export default function AdminDashboard() {
                 Runs daily at 9 AM UTC
               </p>
             </div>
-            <div className="p-4 bg-gray-900/50 rounded-lg border border-gray-700/50">
-              <div className="flex items-center gap-2 mb-2">
-                <span className={`w-2.5 h-2.5 rounded-full ${data.campaigns.some(c => c.active) ? 'bg-green-400 animate-pulse' : 'bg-gray-600'}`} />
-                <p className="text-sm font-medium text-white">Outbound Drip</p>
-              </div>
-              <p className="text-xs text-gray-400">
-                3-email sequence · 10/day batch<br/>
-                {data.campaigns.filter(c => c.active).length} active campaign{data.campaigns.filter(c => c.active).length !== 1 ? 's' : ''}
-              </p>
-            </div>
+            <AutomationToggle
+              campaigns={data.campaigns}
+              onToggle={async (id, active) => {
+                await fetch(`/api/prospects/campaigns/${id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ active }),
+                })
+                // Re-fetch dashboard data
+                const cr = await fetch('/api/prospects/campaigns')
+                if (cr.ok) {
+                  const updated = await cr.json()
+                  setData((d) => d ? { ...d, campaigns: updated } : d)
+                }
+              }}
+            />
             <div className="p-4 bg-gray-900/50 rounded-lg border border-gray-700/50">
               <div className="flex items-center gap-2 mb-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />

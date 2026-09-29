@@ -72,6 +72,7 @@ export default function AdminOutboundPage() {
   const [batchSize, setBatchSize] = useState(10)
   const [sendingBatch, setSendingBatch] = useState(false)
   const [batchResult, setBatchResult] = useState<string | null>(null)
+  const [togglingActive, setTogglingActive] = useState(false)
 
   // Create campaign modal
   const [showCreate, setShowCreate] = useState(false)
@@ -166,6 +167,20 @@ export default function AdminOutboundPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ batch_size: batchSize }),
     })
+  }
+
+  const toggleActive = async () => {
+    if (!selectedCampaign) return
+    const campaign = campaigns.find((c) => c.id === selectedCampaign)
+    if (!campaign) return
+    setTogglingActive(true)
+    const res = await fetch(`/api/prospects/campaigns/${selectedCampaign}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: !campaign.active }),
+    })
+    if (res.ok) await fetchCampaigns()
+    setTogglingActive(false)
   }
 
   const sendNextBatch = async () => {
@@ -275,6 +290,7 @@ export default function AdminOutboundPage() {
                       : 'border-gray-700 text-gray-400 hover:border-gray-500'
                   }`}
                 >
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full mr-2 mb-px ${c.active ? 'bg-green-400' : 'bg-gray-600'}`} />
                   {c.name}
                   <span className="ml-2 text-xs opacity-60">{c.total_prospects}</span>
                 </button>
@@ -304,6 +320,25 @@ export default function AdminOutboundPage() {
             {activeCampaign && (
               <div className="card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
+                  {/* Active toggle */}
+                  <div>
+                    <label className="text-xs text-gray-400 uppercase tracking-wide font-semibold block mb-1">Automation</label>
+                    <button
+                      onClick={toggleActive}
+                      disabled={togglingActive}
+                      className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 ${
+                        activeCampaign.active ? 'bg-green-500' : 'bg-gray-600'
+                      }`}
+                      title={activeCampaign.active ? 'Click to pause daily sends' : 'Click to resume daily sends'}
+                    >
+                      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                        activeCampaign.active ? 'translate-x-8' : 'translate-x-1'
+                      }`} />
+                    </button>
+                    <p className={`text-xs mt-1 font-medium ${activeCampaign.active ? 'text-green-400' : 'text-gray-500'}`}>
+                      {togglingActive ? '…' : activeCampaign.active ? 'On' : 'Off'}
+                    </p>
+                  </div>
                   <div>
                     <label className="text-xs text-gray-400 uppercase tracking-wide font-semibold block mb-1">Emails per day</label>
                     <input
@@ -317,7 +352,7 @@ export default function AdminOutboundPage() {
                     />
                   </div>
                   <p className="text-xs text-gray-500 max-w-xs">
-                    The daily cron sends this many emails automatically. Keep it low (10-25) to protect deliverability.
+                    Toggle automation on/off per campaign. When on, the daily cron sends this many emails automatically.
                   </p>
                 </div>
                 <button
