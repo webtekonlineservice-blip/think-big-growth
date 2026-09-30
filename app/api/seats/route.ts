@@ -10,7 +10,7 @@ import { isSeatFilledByMembers, professionMatchesSeat } from '@/lib/seatAliases'
  * Canonical 34-seat list for Think Big St. Louis.
  * Exported so other routes can reference the same source of truth.
  */
-export const ALL_SEATS = [
+const ALL_SEATS = [
   'Accountant / CPA',
   'Attorney / Lawyer',
   'Auto Sales',
