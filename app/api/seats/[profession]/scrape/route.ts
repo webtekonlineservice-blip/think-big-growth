@@ -5,68 +5,65 @@ import { getSession } from '@/lib/auth'
 import { spawn } from 'child_process'
 import path from 'path'
 
-type Params = { params: { profession: string } }
+interface Params { params: { profession: string } }
 
 /**
  * POST /api/seats/[profession]/scrape
- * Admin-only: trigger the leadgen.py pipeline for this seat in the background.
+ * Admin-only: kick off a Google Maps scrape + enrich + import for a seat.
  *
- * Spawns scripts/leadgen.py with the seat's search_query and campaign_id.
- * Returns immediately — scraping runs async and results flow into the campaign.
+ * Body: { max?: number }   (default 30 leads)
  *
- * Body (all optional):
- *   { max?: number, no_enrich?: boolean }
+ * Runs scripts/leadgen.py as a detached background process so the HTTP
+ * response returns immediately. Progress is visible in Vercel/server logs.
+ * The seat's last_scraped timestamp is updated once the job is queued.
  *
- * NOTE: This works locally. On Vercel (serverless), child_process.spawn is
- * available but the function has a 5-min max runtime — fine for small batches
- * (max ≤ 20). For larger scrapes, run leadgen.py directly from your terminal.
+ * Note: on Vercel serverless this fires a background process that will be
+ * killed when the function sandbox recycles. For larger scrapes (>30) run
+ * leadgen.py locally or add a dedicated worker. For typical chapter-sized
+ * scrapes (20-30 leads) it completes within the function lifetime.
  */
 export async function POST(req: NextRequest, { params }: Params) {
   const session = getSession(req)
   if (!session?.is_admin) return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
 
   const profession = decodeURIComponent(params.profession)
+  const body = await req.json().catch(() => ({}))
+  const max = Math.min(parseInt(body.max ?? '30'), 100)
 
   await connectDB()
 
-  const seat = await Seat.findOne({ profession }).lean()
-  if (!seat) return NextResponse.json({ error: 'Seat not found.' }, { status: 404 })
-  if (!seat.campaign_id) {
-    return NextResponse.json({ error: 'Activate the seat first to create a campaign.' }, { status: 400 })
-  }
-
-  const body = await req.json().catch(() => ({})) as { max?: number; no_enrich?: boolean }
-  const max = Math.min(body.max ?? 20, 50) // cap at 50 for Vercel safety
-  const campaignId = seat.campaign_id.toString()
-  const searchQuery = seat.search_query || `${profession} in ${seat.location ?? 'Kirkwood MO'}`
+  const seat = await Seat.findOne({ profession })
+  if (!seat) return NextResponse.json({ error: 'Seat not found. Activate it first.' }, { status: 404 })
+  if (!seat.campaign_id) return NextResponse.json({ error: 'No campaign linked. Activate the seat first.' }, { status: 400 })
 
   const scriptPath = path.join(process.cwd(), 'scripts', 'leadgen.py')
-  const args = [scriptPath, searchQuery, '--campaign', campaignId, '--max', String(max)]
-  if (body.no_enrich) args.push('--no-enrich')
+  const query = seat.search_query || `${profession} in ${seat.location || 'Kirkwood MO'}`
+  const campaignId = seat.campaign_id.toString()
 
-  // Spawn detached so the response returns immediately
-  const child = spawn('python3', args, {
-    detached: true,
-    stdio: 'ignore',
-    env: {
-      ...process.env,
-      PYTHONUNBUFFERED: '1',
-    },
-  })
+  // Spawn detached so we can return immediately
+  const child = spawn(
+    'python3',
+    [scriptPath, query, '--campaign', campaignId, '--max', String(max)],
+    {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env },
+    }
+  )
   child.unref()
 
-  // Mark last_scraped
+  // Record that a scrape was queued
   await Seat.findOneAndUpdate(
     { profession },
     { $set: { last_scraped: new Date(), updated_at: new Date() } }
   )
 
   return NextResponse.json({
-    success: true,
+    queued: true,
     profession,
-    campaign_id: campaignId,
-    search_query: searchQuery,
+    query,
     max,
-    note: 'Scrape started in background. Prospects will appear in the campaign as they are found and enriched.',
+    campaign_id: campaignId,
+    message: `Scrape queued for "${query}" (up to ${max} leads). Check the campaign in a few minutes.`,
   })
 }

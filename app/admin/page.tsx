@@ -76,6 +76,12 @@ function AutomationToggle({
   )
 }
 
+interface SeatSummary {
+  filled: number
+  active: number
+  open: number
+}
+
 interface DashboardData {
   members: number
   visitors: number
@@ -83,6 +89,7 @@ interface DashboardData {
   conversionRate: number
   prospects: number
   campaigns: Campaign[]
+  seats: SeatSummary
   breakdown: {
     total: number
     withEmail: number
@@ -115,12 +122,13 @@ export default function AdminDashboard() {
         setUser(u)
 
         // Fetch all dashboard data in parallel
-        const [membersRes, visitorsRes, campaignsRes, prospectsRes, breakdownRes] = await Promise.all([
+        const [membersRes, visitorsRes, campaignsRes, prospectsRes, breakdownRes, seatsRes] = await Promise.all([
           fetch('/api/members'),
           fetch('/api/visitors'),
           fetch('/api/prospects/campaigns'),
           fetch('/api/prospects?limit=1'),
           fetch('/api/prospects/breakdown'),
+          fetch('/api/seats'),
         ])
 
         const members = membersRes.ok ? await membersRes.json() : []
@@ -128,6 +136,12 @@ export default function AdminDashboard() {
         const campaigns = campaignsRes.ok ? await campaignsRes.json() : []
         const prospectsData = prospectsRes.ok ? await prospectsRes.json() : { total: 0 }
         const breakdown = breakdownRes.ok ? await breakdownRes.json() : null
+        const seatsData: Array<{ status: string }> = seatsRes.ok ? await seatsRes.json() : []
+        const seats: SeatSummary = {
+          filled: seatsData.filter((s) => s.status === 'filled').length,
+          active: seatsData.filter((s) => s.status === 'active').length,
+          open:   seatsData.filter((s) => s.status === 'open').length,
+        }
 
         const now = new Date()
         const thisMonth = visitors.filter((v: { created_at: string }) => {
@@ -143,6 +157,7 @@ export default function AdminDashboard() {
           conversionRate: visitors.length > 0 ? Math.round((converted / visitors.length) * 100) : 0,
           prospects: prospectsData.total ?? 0,
           campaigns,
+          seats,
           breakdown,
           recentVisitors: visitors.slice(0, 5).map((v: { id: string; first_name: string; last_name: string; company: string; status: string; created_at: string }) => ({
             id: v.id,
@@ -187,7 +202,7 @@ export default function AdminDashboard() {
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
 
         {/* Top stats row */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <div className="stat-card">
             <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Members</p>
             <p className="text-3xl font-bold text-white">{data.members}</p>
@@ -213,6 +228,11 @@ export default function AdminDashboard() {
             <p className="text-3xl font-bold text-purple-400">{totalSent}</p>
             <p className="text-xs text-gray-500">{openRate}% open · {clickRate}% click</p>
           </div>
+          <a href="/admin/seats" className="stat-card hover:border-brand-red/40 transition-colors cursor-pointer">
+            <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Seats</p>
+            <p className="text-3xl font-bold text-brand-red">{data.seats.filled}<span className="text-base text-gray-600">/34</span></p>
+            <p className="text-xs text-gray-500">{data.seats.active} active outreach · {data.seats.open} open</p>
+          </a>
         </div>
 
         {/* Data Being Collected */}

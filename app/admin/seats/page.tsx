@@ -20,11 +20,25 @@ interface SeatView {
   member_company: string | null
 }
 
-const STATUS_CONFIG = {
-  filled:  { dot: 'bg-blue-400',  label: 'Filled',  labelColor: 'text-blue-400',  border: 'border-blue-400/20'  },
-  active:  { dot: 'bg-green-400 animate-pulse', label: 'Active', labelColor: 'text-green-400', border: 'border-green-400/20' },
-  paused:  { dot: 'bg-yellow-400', label: 'Paused', labelColor: 'text-yellow-400', border: 'border-yellow-400/20' },
-  open:    { dot: 'bg-gray-600',  label: 'Open',   labelColor: 'text-gray-500',  border: 'border-gray-700'    },
+const STATUS_COLOR: Record<SeatView['status'], string> = {
+  filled: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  active: 'bg-green-500/20 text-green-300 border-green-500/30',
+  paused: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+  open:   'bg-gray-700/60 text-gray-400 border-gray-600/40',
+}
+
+const STATUS_DOT: Record<SeatView['status'], string> = {
+  filled: 'bg-blue-400',
+  active: 'bg-green-400 animate-pulse',
+  paused: 'bg-yellow-400',
+  open:   'bg-gray-600',
+}
+
+const STATUS_LABEL: Record<SeatView['status'], string> = {
+  filled: 'Filled',
+  active: 'Active',
+  paused: 'Paused',
+  open:   'Open',
 }
 
 export default function AdminSeatsPage() {
@@ -33,8 +47,11 @@ export default function AdminSeatsPage() {
   const [seats, setSeats] = useState<SeatView[]>([])
   const [toggling, setToggling] = useState<string | null>(null)
   const [scraping, setScraping] = useState<string | null>(null)
-  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null)
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [filter, setFilter] = useState<'all' | 'open' | 'active' | 'paused' | 'filled'>('all')
+  const [search, setSearch] = useState('')
+  const [editSeat, setEditSeat] = useState<SeatView | null>(null)
+  const [editLocation, setEditLocation] = useState('')
 
   const fetchSeats = useCallback(async () => {
     const res = await fetch('/api/seats')
@@ -53,64 +70,100 @@ export default function AdminSeatsPage() {
       .finally(() => setLoading(false))
   }, [router, fetchSeats])
 
-  const toggle = async (seat: SeatView) => {
+  const flash = (text: string, type: 'success' | 'error' = 'success') => {
+    setMessage({ text, type })
+    setTimeout(() => setMessage(null), 4000)
+  }
+
+  const handleToggle = async (seat: SeatView) => {
     if (seat.status === 'filled') return
     const activate = seat.status !== 'active'
     setToggling(seat.profession)
-    setMessage(null)
     try {
-      const res = await fetch(`/api/seats/${encodeURIComponent(seat.profession)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: activate }),
-      })
+      const res = await fetch(
+        `/api/seats/${encodeURIComponent(seat.profession)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active: activate }),
+        }
+      )
       const data = await res.json()
       if (res.ok) {
-        setMessage({ text: activate ? `✓ ${seat.profession} outreach activated` : `⏸ ${seat.profession} outreach paused`, ok: true })
+        flash(activate
+          ? `✓ Outreach activated for ${seat.profession}`
+          : `⏸ Outreach paused for ${seat.profession}`)
         await fetchSeats()
       } else {
-        setMessage({ text: data.error || 'Failed.', ok: false })
+        flash(data.error || 'Failed to update seat.', 'error')
       }
     } catch {
-      setMessage({ text: 'Network error.', ok: false })
+      flash('Network error.', 'error')
     }
     setToggling(null)
   }
 
-  const scrape = async (seat: SeatView) => {
+  const handleScrape = async (seat: SeatView) => {
     if (!seat.campaign_id) {
-      setMessage({ text: 'Activate the seat first to create a campaign, then scrape.', ok: false })
+      flash('Activate the seat first to create a campaign.', 'error')
       return
     }
     setScraping(seat.profession)
-    setMessage(null)
     try {
-      const res = await fetch(`/api/seats/${encodeURIComponent(seat.profession)}/scrape`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ max: 20 }),
-      })
+      const res = await fetch(
+        `/api/seats/${encodeURIComponent(seat.profession)}/scrape`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ max: 30 }),
+        }
+      )
       const data = await res.json()
       if (res.ok) {
-        setMessage({ text: `Scraping "${data.search_query}" in background — prospects will appear shortly.`, ok: true })
+        flash(`✓ Scrape queued for ${seat.profession} — check back in ~2 min`)
         await fetchSeats()
       } else {
-        setMessage({ text: data.error || 'Scrape failed.', ok: false })
+        flash(data.error || 'Scrape failed.', 'error')
       }
     } catch {
-      setMessage({ text: 'Network error.', ok: false })
+      flash('Network error.', 'error')
     }
     setScraping(null)
   }
 
-  const filtered = seats.filter((s) => filter === 'all' || s.status === filter)
+  const handleSaveLocation = async () => {
+    if (!editSeat || !editLocation.trim()) return
+    setToggling(editSeat.profession)
+    try {
+      const res = await fetch(`/api/seats/${encodeURIComponent(editSeat.profession)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          active: editSeat.status === 'active',
+          location: editLocation.trim(),
+        }),
+      })
+      if (res.ok) {
+        flash(`✓ Location updated for ${editSeat.profession}`)
+        await fetchSeats()
+      }
+    } catch { flash('Network error.', 'error') }
+    setToggling(null)
+    setEditSeat(null)
+  }
+
   const counts = {
-    all: seats.length,
     filled: seats.filter((s) => s.status === 'filled').length,
     active: seats.filter((s) => s.status === 'active').length,
     paused: seats.filter((s) => s.status === 'paused').length,
-    open: seats.filter((s) => s.status === 'open').length,
+    open:   seats.filter((s) => s.status === 'open').length,
   }
+
+  const filtered = seats.filter((s) => {
+    if (filter !== 'all' && s.status !== filter) return false
+    if (search && !s.profession.toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
 
   if (loading) {
     return (
@@ -132,20 +185,26 @@ export default function AdminSeatsPage() {
             <div className="w-px h-4 bg-gray-700" />
             <div>
               <h1 className="text-lg font-semibold text-white">BNI Seats</h1>
-              <p className="text-xs text-gray-500">
-                {counts.filled} filled · {counts.active} active · {counts.paused} paused · {counts.open} open
-              </p>
+              <p className="text-xs text-gray-500">Toggle outreach on/off per seat — one campaign per profession</p>
             </div>
+          </div>
+          {/* Summary chips */}
+          <div className="hidden sm:flex items-center gap-2 text-xs">
+            {(['filled','active','paused','open'] as const).map((s) => (
+              <span key={s} className={`px-2.5 py-1 rounded-full border font-medium ${STATUS_COLOR[s]}`}>
+                {counts[s]} {STATUS_LABEL[s]}
+              </span>
+            ))}
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-6">
 
-        {/* Message banner */}
+        {/* Flash message */}
         {message && (
           <div className={`rounded-lg px-4 py-3 text-sm border ${
-            message.ok
+            message.type === 'success'
               ? 'bg-green-500/10 border-green-500/20 text-green-400'
               : 'bg-red-500/10 border-red-500/20 text-red-400'
           }`}>
@@ -153,107 +212,182 @@ export default function AdminSeatsPage() {
           </div>
         )}
 
-        {/* Summary stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { key: 'filled',  label: 'Seats Filled',   value: counts.filled,  color: 'text-blue-400'   },
-            { key: 'active',  label: 'Outreach Active', value: counts.active,  color: 'text-green-400'  },
-            { key: 'paused',  label: 'Paused',          value: counts.paused,  color: 'text-yellow-400' },
-            { key: 'open',    label: 'Open / Untargeted',value: counts.open,   color: 'text-gray-400'   },
-          ].map((s) => (
-            <button
-              key={s.key}
-              onClick={() => setFilter(filter === s.key as typeof filter ? 'all' : s.key as typeof filter)}
-              className={`stat-card text-left transition-colors hover:border-gray-500 ${filter === s.key ? 'border-gray-500' : ''}`}
-            >
-              <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">{s.label}</p>
-              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-xs text-gray-600 mt-1">{filter === s.key ? 'click to clear' : 'click to filter'}</p>
-            </button>
-          ))}
+        {/* Filter + search bar */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex gap-2 flex-wrap">
+            {(['all','open','active','paused','filled'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors capitalize ${
+                  filter === f
+                    ? 'bg-brand-indigo border-brand-indigo text-white'
+                    : 'border-gray-700 text-gray-400 hover:border-gray-500'
+                }`}
+              >
+                {f === 'all' ? `All (${seats.length})` : `${STATUS_LABEL[f]} (${counts[f]})`}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            placeholder="Search profession…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input-field py-1.5 text-sm sm:w-56 sm:ml-auto"
+          />
         </div>
 
-        {/* Seat list */}
-        <div className="space-y-2">
+        {/* Seats grid */}
+        <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((seat) => {
-            const cfg = STATUS_CONFIG[seat.status]
             const isToggling = toggling === seat.profession
             const isScraping = scraping === seat.profession
+            const canToggle = seat.status !== 'filled'
+            const isOn = seat.status === 'active'
 
             return (
               <div
                 key={seat.profession}
-                className={`card border ${cfg.border} flex flex-col sm:flex-row sm:items-center gap-4 py-4`}
+                className={`card flex flex-col gap-3 transition-all ${
+                  seat.status === 'filled' ? 'opacity-75' : ''
+                }`}
               >
-                {/* Status dot + name */}
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
-                  <div className="min-w-0">
+                {/* Header row */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[seat.status]}`} />
                     <p className="text-sm font-semibold text-white truncate">{seat.profession}</p>
-                    {seat.status === 'filled' && seat.member_name && (
-                      <p className="text-xs text-blue-400">{seat.member_name} · {seat.member_company}</p>
-                    )}
-                    {seat.status === 'active' && (
-                      <p className="text-xs text-gray-400">
-                        {seat.prospects_count} prospects · {seat.total_sent} sent
-                        {seat.total_sent > 0 ? ` · ${Math.round((seat.total_opened / seat.total_sent) * 100)}% open` : ''}
-                      </p>
-                    )}
-                    {seat.status === 'paused' && (
-                      <p className="text-xs text-gray-500">
-                        {seat.prospects_count} prospects · {seat.total_sent} sent · paused
-                      </p>
-                    )}
-                    {seat.status === 'open' && (
-                      <p className="text-xs text-gray-600">No outreach running</p>
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full border flex-shrink-0 ${STATUS_COLOR[seat.status]}`}>
+                    {STATUS_LABEL[seat.status]}
+                  </span>
+                </div>
+
+                {/* Filled by */}
+                {seat.status === 'filled' && seat.member_name && (
+                  <p className="text-xs text-blue-300">
+                    {seat.member_name}{seat.member_company ? ` · ${seat.member_company}` : ''}
+                  </p>
+                )}
+
+                {/* Stats */}
+                {(seat.prospects_count > 0 || seat.total_sent > 0) && (
+                  <div className="flex gap-4 text-xs text-gray-500">
+                    {seat.prospects_count > 0 && <span>{seat.prospects_count} prospects</span>}
+                    {seat.total_sent > 0 && <span>{seat.total_sent} sent</span>}
+                    {seat.total_sent > 0 && seat.total_opened > 0 && (
+                      <span>{Math.round((seat.total_opened / seat.total_sent) * 100)}% open</span>
                     )}
                   </div>
+                )}
+
+                {/* Search query */}
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs text-gray-600 truncate flex-1" title={seat.search_query}>
+                    🔍 {seat.search_query}
+                  </p>
+                  <button
+                    onClick={() => { setEditSeat(seat); setEditLocation(seat.location) }}
+                    className="text-xs text-gray-600 hover:text-gray-400 transition-colors flex-shrink-0"
+                    title="Edit location"
+                  >
+                    ✎
+                  </button>
                 </div>
 
-                {/* Status badge */}
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-800 ${cfg.labelColor} flex-shrink-0 hidden sm:block`}>
-                  {cfg.label}
-                </span>
+                {seat.last_scraped && (
+                  <p className="text-xs text-gray-600">
+                    Last scraped {new Date(seat.last_scraped).toLocaleDateString()}
+                  </p>
+                )}
 
                 {/* Actions */}
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  {/* Scrape button — only when campaign exists */}
-                  {(seat.status === 'active' || seat.status === 'paused') && (
+                {seat.status !== 'filled' && (
+                  <div className="flex items-center gap-2 pt-1 border-t border-gray-700/50 mt-auto">
+                    {/* On/Off toggle */}
                     <button
-                      onClick={() => scrape(seat)}
-                      disabled={isScraping || !!toggling || !!scraping}
-                      className="text-xs text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40"
-                    >
-                      {isScraping ? 'Scraping…' : '↓ Scrape Leads'}
-                    </button>
-                  )}
-
-                  {/* Toggle switch */}
-                  {seat.status !== 'filled' && (
-                    <button
-                      onClick={() => toggle(seat)}
-                      disabled={isToggling || !!toggling || !!scraping}
-                      title={seat.status === 'active' ? 'Pause outreach' : 'Start outreach'}
-                      className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors disabled:opacity-50 ${
-                        seat.status === 'active' ? 'bg-green-500' : 'bg-gray-600'
+                      onClick={() => handleToggle(seat)}
+                      disabled={!canToggle || isToggling}
+                      title={isOn ? 'Pause outreach' : 'Start outreach'}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
+                        isOn ? 'bg-green-500' : 'bg-gray-600'
                       }`}
                     >
-                      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                        seat.status === 'active' ? 'translate-x-8' : 'translate-x-1'
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                        isOn ? 'translate-x-6' : 'translate-x-1'
                       }`} />
                     </button>
-                  )}
+                    <span className={`text-xs font-medium ${isOn ? 'text-green-400' : 'text-gray-500'}`}>
+                      {isToggling ? '…' : isOn ? 'On' : 'Off'}
+                    </span>
 
-                  {seat.status === 'filled' && (
-                    <span className="text-xs text-blue-400/60 px-3 py-1.5">Seat filled</span>
-                  )}
-                </div>
+                    <div className="flex-1" />
+
+                    {/* Scrape button — only when active */}
+                    {(isOn || seat.status === 'paused') && seat.campaign_id && (
+                      <button
+                        onClick={() => handleScrape(seat)}
+                        disabled={isScraping}
+                        className="text-xs text-gray-400 hover:text-white transition-colors disabled:opacity-50 border border-gray-700 rounded-md px-2.5 py-1"
+                      >
+                        {isScraping ? 'Queuing…' : '+ Scrape leads'}
+                      </button>
+                    )}
+
+                    {/* View campaign */}
+                    {seat.campaign_id && (
+                      <Link
+                        href="/admin/outbound"
+                        className="text-xs text-brand-indigo hover:text-white transition-colors"
+                      >
+                        Campaign →
+                      </Link>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })}
         </div>
 
+        {filtered.length === 0 && (
+          <div className="card text-center py-12">
+            <p className="text-gray-500 text-sm">No seats match this filter.</p>
+          </div>
+        )}
       </main>
+
+      {/* Edit location modal */}
+      {editSeat && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm">
+            <h3 className="text-base font-semibold text-white mb-1">Edit Search Location</h3>
+            <p className="text-xs text-gray-400 mb-4">{editSeat.profession}</p>
+            <label className="label">Location (city + state)</label>
+            <input
+              className="input-field mb-1"
+              value={editLocation}
+              onChange={(e) => setEditLocation(e.target.value)}
+              placeholder="Kirkwood MO"
+              autoFocus
+            />
+            <p className="text-xs text-gray-500 mb-4">
+              Search query: <span className="text-gray-300">{editSeat.profession} in {editLocation || '…'}</span>
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setEditSeat(null)} className="btn-ghost px-4 py-2 text-sm">Cancel</button>
+              <button
+                onClick={handleSaveLocation}
+                disabled={toggling === editSeat.profession}
+                className="btn-primary px-5 py-2 text-sm disabled:opacity-60"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
