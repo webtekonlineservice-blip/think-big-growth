@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+const MAX_ACTIVE_SEATS = 5
+
 interface SeatView {
   profession: string
   status: 'filled' | 'active' | 'paused' | 'open'
@@ -63,6 +65,11 @@ export default function AdminSeatsPage() {
   const toggleSeat = async (seat: SeatView) => {
     if (seat.status === 'filled') return
     const activate = seat.status !== 'active'
+    // Pre-check cap on the client before even calling the API
+    if (activate && counts.active >= MAX_ACTIVE_SEATS) {
+      showMessage(`You're at the ${MAX_ACTIVE_SEATS}-seat limit. Pause an active seat first.`, 'error')
+      return
+    }
     setToggling(seat.profession)
     try {
       const res = await fetch(
@@ -159,6 +166,23 @@ export default function AdminSeatsPage() {
               </p>
             </div>
           </div>
+          {/* Active seat slot meter */}
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs text-gray-400 font-medium">Active slots</p>
+              <p className="text-xs text-gray-500">{counts.active} / {MAX_ACTIVE_SEATS} running</p>
+            </div>
+            <div className="flex gap-1">
+              {Array.from({ length: MAX_ACTIVE_SEATS }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-3 h-6 rounded-sm transition-colors ${
+                    i < counts.active ? 'bg-brand-indigo' : 'bg-gray-700'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </header>
 
@@ -239,9 +263,13 @@ export default function AdminSeatsPage() {
                     {canToggle && (
                       <button
                         onClick={() => toggleSeat(seat)}
-                        disabled={isToggling}
-                        title={isOn ? 'Pause outreach' : 'Start outreach'}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${
+                        disabled={isToggling || (!isOn && counts.active >= MAX_ACTIVE_SEATS)}
+                        title={
+                          !isOn && counts.active >= MAX_ACTIVE_SEATS
+                            ? `At ${MAX_ACTIVE_SEATS}-seat limit — pause another seat first`
+                            : isOn ? 'Pause outreach' : 'Start outreach'
+                        }
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                           isOn ? 'bg-brand-indigo' : 'bg-gray-600'
                         }`}
                       >
