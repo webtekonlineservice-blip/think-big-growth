@@ -52,10 +52,17 @@ export default function AdminSeatsPage() {
   const [search, setSearch] = useState('')
   const [editSeat, setEditSeat] = useState<SeatView | null>(null)
   const [editLocation, setEditLocation] = useState('')
+  const [suggestions, setSuggestions] = useState<string[]>([])
+  const [slotsAvailable, setSlotsAvailable] = useState(5)
 
   const fetchSeats = useCallback(async () => {
-    const res = await fetch('/api/seats')
-    if (res.ok) setSeats(await res.json())
+    const res = await fetch('/api/seats?suggest=true')
+    if (res.ok) {
+      const data = await res.json()
+      setSeats(Array.isArray(data) ? data : (data.seats ?? []))
+      if (data.suggestions) setSuggestions(data.suggestions)
+      if (typeof data.slots_available === 'number') setSlotsAvailable(data.slots_available)
+    }
   }, [])
 
   useEffect(() => {
@@ -209,6 +216,37 @@ export default function AdminSeatsPage() {
               : 'bg-red-500/10 border-red-500/20 text-red-400'
           }`}>
             {message.text}
+          </div>
+        )}
+
+        {/* Active cap warning */}
+        {slotsAvailable === 0 && (
+          <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 rounded-lg px-4 py-3 text-sm flex items-center gap-2">
+            <span>⚠️</span>
+            <span>You have 5 active seats — the maximum. Pause one before activating another.</span>
+          </div>
+        )}
+
+        {/* Rotation suggestions */}
+        {suggestions.length > 0 && slotsAvailable > 0 && (
+          <div className="bg-brand-indigo/10 border border-brand-indigo/20 rounded-lg px-4 py-3">
+            <p className="text-xs text-brand-indigo-light font-semibold uppercase tracking-wide mb-2">
+              Next up — {slotsAvailable} slot{slotsAvailable !== 1 ? 's' : ''} available
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((prof) => (
+                <button
+                  key={prof}
+                  onClick={() => setFilter('open')}
+                  className="text-xs bg-brand-indigo/20 text-brand-indigo-light border border-brand-indigo/30 px-3 py-1 rounded-full hover:bg-brand-indigo/30 transition-colors"
+                >
+                  {prof} →
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              These seats have never been scraped — activate to start outreach.
+            </p>
           </div>
         )}
 

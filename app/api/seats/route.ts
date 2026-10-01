@@ -145,5 +145,29 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  return NextResponse.json(result)
+  // Rotation suggestions — seats to activate next (returned when ?suggest=true)
+  // Priority: (1) never scraped, (2) least recently scraped, (3) no campaign yet
+  const suggest = req.nextUrl.searchParams.get('suggest') === 'true'
+  const MAX_ACTIVE = 5
+  const activeCount = result.filter((s) => s.status === 'active').length
+  const slotsAvailable = Math.max(0, MAX_ACTIVE - activeCount)
+
+  const suggestions = suggest
+    ? result
+        .filter((s) => s.status === 'open' || s.status === 'paused')
+        .sort((a, b) => {
+          if (!a.last_scraped && b.last_scraped) return -1
+          if (a.last_scraped && !b.last_scraped) return 1
+          if (a.last_scraped && b.last_scraped) {
+            return new Date(a.last_scraped).getTime() - new Date(b.last_scraped).getTime()
+          }
+          if (!a.campaign_id && b.campaign_id) return -1
+          if (a.campaign_id && !b.campaign_id) return 1
+          return 0
+        })
+        .slice(0, slotsAvailable || 5)
+        .map((s) => s.profession)
+    : undefined
+
+  return NextResponse.json({ seats: result, active_count: activeCount, slots_available: slotsAvailable, ...(suggest && { suggestions }) })
 }

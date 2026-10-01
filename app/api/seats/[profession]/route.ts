@@ -65,6 +65,19 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   if (active) {
     // --- ACTIVATE ---
+    // Enforce max active seats cap (default 5) to keep sends focused
+    const MAX_ACTIVE = 5
+    const activeSeats = await Seat.countDocuments({ outreach_status: 'active' })
+    // Don't count the current seat if it's already active (reactivation)
+    const currentSeat = await Seat.findOne({ profession })
+    const alreadyActive = currentSeat?.outreach_status === 'active'
+    if (!alreadyActive && activeSeats >= MAX_ACTIVE) {
+      return NextResponse.json(
+        { error: `You already have ${activeSeats} active seats (max ${MAX_ACTIVE}). Pause one before activating another.` },
+        { status: 409 }
+      )
+    }
+
     let campaign
 
     if (seat.campaign_id) {
