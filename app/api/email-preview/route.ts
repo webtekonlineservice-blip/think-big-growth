@@ -30,7 +30,9 @@ export async function POST(req: NextRequest) {
       test_profession?: string
     }
 
-    if (!to?.trim()) return NextResponse.json({ error: 'Recipient email (to) is required.' }, { status: 400 })
+    // Default to admin's own email if not specified (used by send log preview button)
+    const recipient = to?.trim() || session.email
+    if (!recipient) return NextResponse.json({ error: 'Recipient email required.' }, { status: 400 })
     if (!step || step < 1 || step > 3) return NextResponse.json({ error: 'Step must be 1, 2, or 3.' }, { status: 400 })
 
     const name = test_name || 'John'
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     const result = await getResend().emails.send({
       from: fromAddress,
-      to: to.trim(),
+      to: recipient,
       subject: `[TEST] ${seq.subject}`,
       html,
     })

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 interface LogEntry {
   id: string
@@ -12,6 +13,10 @@ interface LogEntry {
   status: 'sent' | 'failed'
   error: string | null
   date: string
+  campaign_name: string | null
+  invite_code: string | null
+  credited_to: string | null
+  prospect_name: string | null
 }
 
 const STEP_LABELS: Record<string, string> = {
@@ -43,6 +48,8 @@ export default function SendLogPage() {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
+  const [previewing, setPreviewing] = useState<string | null>(null)
+  const [previewResult, setPreviewResult] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -66,6 +73,34 @@ export default function SendLogPage() {
     }
   }
 
+  // Send a preview of this email step to the admin's own inbox
+  const handlePreview = async (log: LogEntry) => {
+    const stepNum = parseInt(log.step.replace('sequence_', ''))
+    if (!stepNum) return
+    setPreviewing(log.id)
+    setPreviewResult(null)
+    try {
+      const res = await fetch('/api/email-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: undefined, // uses session email server-side
+          step: stepNum,
+          test_name: log.prospect_name || 'Sample Prospect',
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setPreviewResult(`Preview sent to your inbox (step ${stepNum})`)
+      } else {
+        setPreviewResult(data.error || 'Preview failed.')
+      }
+    } catch {
+      setPreviewResult('Network error.')
+    }
+    setPreviewing(null)
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -81,24 +116,34 @@ export default function SendLogPage() {
     <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-white">Send Log</h1>
-          <p className="text-sm text-gray-500">All SMS and email messages sent by the platform</p>
+        <div className="flex items-center gap-4">
+          <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm">← Dashboard</Link>
+          <div className="w-px h-4 bg-gray-700" />
+          <div>
+            <h1 className="text-xl font-bold text-white">Send Log</h1>
+            <p className="text-sm text-gray-500">All SMS and email messages sent by the platform</p>
+          </div>
         </div>
-        <span className="text-sm text-gray-400">{total} total messages</span>
+        <span className="text-sm text-gray-400">{total.toLocaleString()} total messages</span>
       </div>
+
+      {previewResult && (
+        <div className="bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg px-4 py-3 text-sm">
+          {previewResult}
+        </div>
+      )}
 
       {/* Log table */}
       {logs.length === 0 ? (
         <div className="card text-center py-16">
-          <p className="text-gray-500 text-sm">No messages sent yet. They'll appear here once automations or campaigns fire.</p>
+          <p className="text-gray-500 text-sm">No messages sent yet.</p>
         </div>
       ) : (
         <div className="card p-0 overflow-x-auto">
-          <table className="w-full text-sm min-w-[700px]">
+          <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="border-b border-gray-700">
-                {['Date', 'Channel', 'Type', 'Recipient', 'Status'].map((h) => (
+                {['Date', 'Channel', 'Type', 'Recipient', 'Credited To', 'Status', ''].map((h) => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 first:pl-6 last:pr-6">{h}</th>
                 ))}
               </tr>
@@ -106,27 +151,65 @@ export default function SendLogPage() {
             <tbody>
               {logs.map((log, i) => (
                 <tr key={log.id} className={`${i < logs.length - 1 ? 'border-b border-gray-700/50' : ''} hover:bg-gray-800/30`}>
+                  {/* Date */}
                   <td className="px-4 pl-6 py-3 text-gray-400 text-xs whitespace-nowrap">
                     {new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     <span className="text-gray-600 ml-1">
                       {new Date(log.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                     </span>
                   </td>
+                  {/* Channel */}
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${CHANNEL_STYLES[log.channel] || 'text-gray-400'}`}>
                       {log.channel.toUpperCase()}
                     </span>
                   </td>
+                  {/* Type / step */}
                   <td className="px-4 py-3">
                     <p className="text-white text-sm font-medium">{STEP_LABELS[log.step] || log.step}</p>
-                    <p className="text-gray-600 text-xs">{TYPE_LABELS[log.type] || 'Email'}</p>
+                    <p className="text-gray-600 text-xs">
+                      {log.campaign_name || TYPE_LABELS[log.type] || 'Email'}
+                    </p>
                   </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs font-mono">{log.to}</td>
-                  <td className="px-4 pr-6 py-3">
+                  {/* Recipient */}
+                  <td className="px-4 py-3">
+                    <p className="text-gray-300 text-xs font-mono">{log.to}</p>
+                    {log.prospect_name && (
+                      <p className="text-gray-500 text-xs">{log.prospect_name}</p>
+                    )}
+                  </td>
+                  {/* Credited to (invite code / member) */}
+                  <td className="px-4 py-3">
+                    {log.credited_to ? (
+                      <div>
+                        <p className="text-brand-indigo text-xs font-medium">{log.credited_to}</p>
+                        {log.invite_code && log.invite_code !== log.credited_to && (
+                          <p className="text-gray-600 text-xs font-mono">{log.invite_code}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-gray-600 text-xs">—</span>
+                    )}
+                  </td>
+                  {/* Status */}
+                  <td className="px-4 py-3">
                     {log.status === 'sent' ? (
                       <span className="text-green-400 text-xs font-medium">✓ Sent</span>
                     ) : (
                       <span className="text-red-400 text-xs font-medium" title={log.error || ''}>✗ Failed</span>
+                    )}
+                  </td>
+                  {/* Preview */}
+                  <td className="px-4 pr-6 py-3">
+                    {log.channel === 'email' && log.step.startsWith('sequence_') && (
+                      <button
+                        onClick={() => handlePreview(log)}
+                        disabled={previewing === log.id}
+                        className="text-xs text-gray-400 hover:text-white transition-colors disabled:opacity-40 whitespace-nowrap"
+                        title="Send a preview of this email to your inbox"
+                      >
+                        {previewing === log.id ? 'Sending…' : 'Preview →'}
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -146,7 +229,7 @@ export default function SendLogPage() {
           >
             ← Previous
           </button>
-          <span className="text-sm text-gray-500">Page {page}</span>
+          <span className="text-sm text-gray-500">Page {page} of {Math.ceil(total / 50)}</span>
           <button
             onClick={() => fetchLogs(page + 1)}
             disabled={logs.length < 50}
