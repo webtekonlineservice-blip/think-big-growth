@@ -5,22 +5,17 @@ import { getSession } from '@/lib/auth'
 import { spawn } from 'child_process'
 import path from 'path'
 
-interface Params { params: { profession: string } }
+type Params = { params: { profession: string } }
 
 /**
  * POST /api/seats/[profession]/scrape
- * Admin-only: kick off a Google Maps scrape + enrich + import for a seat.
+ * Admin-only: trigger the leadgen pipeline for this seat.
  *
- * Body: { max?: number }   (default 30 leads)
+ * Runs scripts/leadgen.py as a background child process so the request
+ * returns immediately — scraping happens async. Progress can be monitored
+ * via the prospects count on the seat/campaign.
  *
- * Runs scripts/leadgen.py as a detached background process so the HTTP
- * response returns immediately. Progress is visible in Vercel/server logs.
- * The seat's last_scraped timestamp is updated once the job is queued.
- *
- * Note: on Vercel serverless this fires a background process that will be
- * killed when the function sandbox recycles. For larger scrapes (>30) run
- * leadgen.py locally or add a dedicated worker. For typical chapter-sized
- * scrapes (20-30 leads) it completes within the function lifetime.
+ * Body (all optional): { max?: number, no_enrich?: boolean }
  */
 export async function POST(req: NextRequest, { params }: Params) {
   const session = getSession(req)
@@ -28,42 +23,55 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const profession = decodeURIComponent(params.profession)
   const body = await req.json().catch(() => ({}))
-  const max = Math.min(parseInt(body.max ?? '30'), 100)
+  const max: number = body.max ?? 30
+  const noEnrich: boolean = body.no_enrich ?? false
 
   await connectDB()
 
   const seat = await Seat.findOne({ profession })
-  if (!seat) return NextResponse.json({ error: 'Seat not found. Activate it first.' }, { status: 404 })
-  if (!seat.campaign_id) return NextResponse.json({ error: 'No campaign linked. Activate the seat first.' }, { status: 400 })
+  if (!seat) {
+    return NextResponse.json({ error: 'Seat not found. Activate it first.' }, { status: 404 })
+  }
+  if (!seat.campaign_id) {
+    return NextResponse.json({ error: 'No campaign linked. Activate the seat first.' }, { status: 400 })
+  }
 
-  const scriptPath = path.join(process.cwd(), 'scripts', 'leadgen.py')
-  const query = seat.search_query || `${profession} in ${seat.location || 'Kirkwood MO'}`
+  const query = seat.search_query || `${profession} in ${seat.location}`
   const campaignId = seat.campaign_id.toString()
+  const scriptPath = path.join(process.cwd(), 'scripts', 'leadgen.py')
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thinkbig.webtek.ai'
 
-  // Spawn detached so we can return immediately
-  const child = spawn(
-    'python3',
-    [scriptPath, query, '--campaign', campaignId, '--max', String(max)],
-    {
-      detached: true,
-      stdio: 'ignore',
-      env: { ...process.env },
-    }
-  )
+  // Build args
+  const args = [
+    scriptPath,
+    query,
+    '--campaign', campaignId,
+    '--max', String(max),
+  ]
+  if (noEnrich) args.push('--no-enrich')
+
+  // Spawn detached so it runs after the response is sent
+  const child = spawn('python3', args, {
+    detached: true,
+    stdio: 'ignore',
+    env: {
+      ...process.env,
+      NEXT_PUBLIC_APP_URL: appUrl,
+    },
+  })
   child.unref()
 
-  // Record that a scrape was queued
+  // Mark the seat as having a scrape in progress
   await Seat.findOneAndUpdate(
     { profession },
-    { $set: { last_scraped: new Date(), updated_at: new Date() } }
+    { $set: { updated_at: new Date() } }
   )
 
   return NextResponse.json({
-    queued: true,
-    profession,
+    started: true,
     query,
-    max,
     campaign_id: campaignId,
-    message: `Scrape queued for "${query}" (up to ${max} leads). Check the campaign in a few minutes.`,
+    max,
+    message: `Scraping "${query}" in the background. Check prospect counts in a few minutes.`,
   })
 }
