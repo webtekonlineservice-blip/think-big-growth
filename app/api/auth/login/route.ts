@@ -4,6 +4,8 @@ import { connectDB } from '@/lib/mongodb'
 import Member from '@/lib/models/Member'
 import { signToken, SESSION_COOKIE, SessionPayload } from '@/lib/auth'
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: NextRequest) {
   try {
     const { email, password } = (await req.json()) as { email?: string; password?: string }
