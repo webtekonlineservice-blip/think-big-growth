@@ -29,9 +29,10 @@ export default function MemberLoginPage() {
         return
       }
 
-      // Hard navigate so the browser commits the session cookie before
-      // the next page's auth check fires. router.push (soft nav) can race
-      // against the Set-Cookie header being applied.
+      // Store session in sessionStorage so admin pages can read it
+      // instantly on load without waiting for a cookie round-trip.
+      sessionStorage.setItem('tbg_user', JSON.stringify(data.user))
+
       if (data.user?.is_admin) {
         window.location.href = '/admin'
       } else {

@@ -114,7 +114,14 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/auth/me')
+    // Check sessionStorage first (set by login page) — avoids cookie timing issues.
+    // Fall back to /api/auth/me for direct navigation / page refresh.
+    const stored = sessionStorage.getItem('tbg_user')
+    const checkAuth = stored
+      ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(stored) }) } as Response)
+      : fetch('/api/auth/me', { credentials: 'include' })
+
+    checkAuth
       .then(async (res) => {
         if (!res.ok) { window.location.href = '/member/login'; return }
         const { user: u } = await res.json()

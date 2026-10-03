@@ -100,7 +100,7 @@ export default function AdminMembersPage() {
   }
 
   useEffect(() => {
-    fetch('/api/auth/me')
+    (() => { const s = sessionStorage.getItem('tbg_user'); return s ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(s) }) }) : fetch('/api/auth/me', { credentials: 'include' }) })()
       .then(async (res) => {
         if (!res.ok) { window.location.href = '/member/login'; return }
         const { user: u } = await res.json()
