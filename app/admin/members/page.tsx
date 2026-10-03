@@ -102,13 +102,13 @@ export default function AdminMembersPage() {
   useEffect(() => {
     fetch('/api/auth/me')
       .then(async (res) => {
-        if (!res.ok) { router.push('/member/login'); return }
+        if (!res.ok) { window.location.href = '/member/login'; return }
         const { user: u } = await res.json()
-        if (!u.is_admin) { router.push('/member'); return }
+        if (!u.is_admin) { window.location.href = '/member'; return }
         setUser(u)
         await fetchMembers()
       })
-      .catch(() => router.push('/member/login'))
+      .catch(() => window.location.href = '/member/login')
       .finally(() => setLoading(false))
   }, [router, fetchMembers])
 

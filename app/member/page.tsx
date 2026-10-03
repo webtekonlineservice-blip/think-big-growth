@@ -68,7 +68,7 @@ export default function MemberDashboard() {
     fetch('/api/auth/me')
       .then(async (res) => {
         if (!res.ok) {
-          router.push('/member/login')
+          window.location.href = '/member/login'
           return
         }
         const { user: sessionUser } = await res.json() as { user: SessionUser }
@@ -76,7 +76,7 @@ export default function MemberDashboard() {
         await fetchMemberData(sessionUser.id)
       })
       .catch(() => {
-        router.push('/member/login')
+        window.location.href = '/member/login'
       })
       .finally(() => setLoading(false))
   }, [router, fetchMemberData])
@@ -101,7 +101,7 @@ export default function MemberDashboard() {
 
   const handleSignOut = async () => {
     await fetch('/api/auth/logout', { method: 'POST' })
-    router.push('/')
+    window.location.href = '/'
   }
 
   if (loading) {

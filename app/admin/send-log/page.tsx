@@ -54,12 +54,12 @@ export default function SendLogPage() {
   useEffect(() => {
     fetch('/api/auth/me')
       .then(async (res) => {
-        if (!res.ok) { router.push('/member/login'); return }
+        if (!res.ok) { window.location.href = '/member/login'; return }
         const { user } = await res.json()
-        if (!user.is_admin) { router.push('/member'); return }
+        if (!user.is_admin) { window.location.href = '/member'; return }
         await fetchLogs(1)
       })
-      .catch(() => router.push('/member/login'))
+      .catch(() => window.location.href = '/member/login')
       .finally(() => setLoading(false))
   }, [router])
 
