@@ -1,15 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 import Link from 'next/link'
-
-interface SessionUser {
-  id: string
-  email: string
-  name: string
-  is_admin: boolean
-}
 
 interface Member {
   id: string
@@ -36,8 +29,7 @@ const EMPTY_FORM = {
 }
 
 export default function AdminMembersPage() {
-  const router = useRouter()
-  const [user, setUser] = useState<SessionUser | null>(null)
+  const { user, loading: authLoading } = useAdminAuth()
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -100,17 +92,9 @@ export default function AdminMembersPage() {
   }
 
   useEffect(() => {
-    (() => { const s = sessionStorage.getItem('tbg_user'); return s ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(s) }) }) : fetch('/api/auth/me', { credentials: 'include' }) })()
-      .then(async (res) => {
-        if (!res.ok) { window.location.href = '/member/login'; return }
-        const { user: u } = await res.json()
-        if (!u.is_admin) { window.location.href = '/member'; return }
-        setUser(u)
-        await fetchMembers()
-      })
-      .catch(() => window.location.href = '/member/login')
-      .finally(() => setLoading(false))
-  }, [router, fetchMembers])
+    if (!user) return
+    fetchMembers().finally(() => setLoading(false))
+  }, [user, fetchMembers])
 
   const openAdd = () => {
     setForm({ ...EMPTY_FORM, display_order: members.length })
@@ -224,7 +208,7 @@ export default function AdminMembersPage() {
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://thinkbig.webtek.ai'
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <svg className="w-8 h-8 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">

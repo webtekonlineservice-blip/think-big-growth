@@ -29,10 +29,6 @@ export default function MemberLoginPage() {
         return
       }
 
-      // Store session in sessionStorage so admin pages can read it
-      // instantly on load without waiting for a cookie round-trip.
-      sessionStorage.setItem('tbg_user', JSON.stringify(data.user))
-
       if (data.user?.is_admin) {
         window.location.href = '/admin'
       } else {

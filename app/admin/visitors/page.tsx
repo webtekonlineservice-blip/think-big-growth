@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 
-interface SessionUser { id: string; email: string; name: string; is_admin: boolean }
 
 interface Visitor {
   id: string
@@ -33,8 +32,7 @@ const ALL_STATUSES = ['all', 'invited', 'visited', 'applied', 'member'] as const
 type FilterStatus = typeof ALL_STATUSES[number]
 
 export default function AdminVisitorsPage() {
-  const router = useRouter()
-  const [user, setUser] = useState<SessionUser | null>(null)
+  const { user, loading: authLoading } = useAdminAuth()
   const [visitors, setVisitors] = useState<Visitor[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -64,17 +62,9 @@ export default function AdminVisitorsPage() {
   }, [])
 
   useEffect(() => {
-    (() => { const s = sessionStorage.getItem('tbg_user'); return s ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(s) }) }) : fetch('/api/auth/me', { credentials: 'include' }) })()
-      .then(async (res) => {
-        if (!res.ok) { window.location.href = '/member/login'; return }
-        const { user: u } = await res.json()
-        if (!u.is_admin) { window.location.href = '/member'; return }
-        setUser(u)
-        await fetchVisitors()
-      })
-      .catch(() => window.location.href = '/member/login')
-      .finally(() => setLoading(false))
-  }, [router, fetchVisitors])
+    if (!user) return
+    fetchVisitors().finally(() => setLoading(false))
+  }, [user, fetchVisitors])
 
   const filtered = useMemo(() => {
     return visitors.filter((v) => {
@@ -170,7 +160,7 @@ export default function AdminVisitorsPage() {
     setSmsMessage('')
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <svg className="w-8 h-8 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">

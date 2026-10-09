@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 
 export default function AnnouncePage() {
-  const router = useRouter()
+  const { user, loading: authLoading } = useAdminAuth()
   const [loading, setLoading] = useState(true)
   const [testEmail, setTestEmail] = useState('')
   const [sending, setSending] = useState(false)
@@ -12,23 +12,18 @@ export default function AnnouncePage() {
   const [members, setMembers] = useState<{ name: string; email: string }[]>([])
 
   useEffect(() => {
-    (() => { const s = sessionStorage.getItem('tbg_user'); return s ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(s) }) }) : fetch('/api/auth/me', { credentials: 'include' }) })()
-      .then(async (res) => {
-        if (!res.ok) { window.location.href = '/member/login'; return }
-        const { user } = await res.json()
-        if (!user.is_admin) { window.location.href = '/member'; return }
-        setTestEmail(user.email)
-        // Load members with real emails for the "send all" count
-        const mr = await fetch('/api/members')
+    if (!user) return
+    setTestEmail(user.email)
+    fetch('/api/members', { credentials: 'include' })
+      .then(async (mr) => {
         if (mr.ok) {
           const all = await mr.json()
           setMembers(all.filter((m: { email: string }) =>
             m.email && !m.email.includes('thinkbig.local') && !m.email.includes('placeholder')))
         }
       })
-      .catch(() => window.location.href = '/member/login')
       .finally(() => setLoading(false))
-  }, [router])
+  }, [user])
 
   const sendTest = async () => {
     setSending(true); setResult(null)
@@ -59,7 +54,7 @@ export default function AnnouncePage() {
     setSending(false)
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <svg className="w-8 h-8 text-brand-red animate-spin" fill="none" viewBox="0 0 24 24">

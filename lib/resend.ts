@@ -199,3 +199,151 @@ export async function sendCustomEmail({
 
   return getResend().emails.send({ from: FROM, to, subject, html })
 }
+
+
+// ─── Treasurer Report ─────────────────────────────────────────────────────────
+
+export interface TreasurerMemberStatement {
+  name: string
+  charged: number
+  paid: number
+  balance: number
+}
+
+export interface TreasurerReportData {
+  memberStatements: TreasurerMemberStatement[]
+  bankBalance: number
+  totalOwed: number
+  monthIncome: number
+  monthExpense: number
+  monthLabel: string
+  transactions: { date: string; description: string; type: string; amount: number }[]
+}
+
+function money(n: number): string {
+  return `$${n.toFixed(2)}`
+}
+
+function balanceBadge(balance: number): string {
+  if (balance > 0)
+    return `<span style="background:#7f1d1d;color:#fca5a5;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">Owes ${money(balance)}</span>`
+  if (balance < 0)
+    return `<span style="background:#1e3a5f;color:#93c5fd;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">Credit ${money(Math.abs(balance))}</span>`
+  return `<span style="background:#064e3b;color:#6ee7b7;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">Paid Up</span>`
+}
+
+export async function sendTreasurerReport({
+  to,
+  data,
+}: {
+  to: string | string[]
+  data: TreasurerReportData
+}) {
+  const net = data.monthIncome - data.monthExpense
+  const membersOwing = data.memberStatements.filter((m) => m.balance > 0).length
+
+  const summaryCards = `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr>
+        <td width="50%" style="padding:4px;">
+          <div style="background:#111827;border:1px solid #374151;border-left:3px solid #16a34a;border-radius:8px;padding:14px;">
+            <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Bank Balance</p>
+            <p style="margin:4px 0 0;font-size:22px;font-weight:800;color:#4ade80;">${money(data.bankBalance)}</p>
+          </div>
+        </td>
+        <td width="50%" style="padding:4px;">
+          <div style="background:#111827;border:1px solid #374151;border-left:3px solid #dc2626;border-radius:8px;padding:14px;">
+            <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">Outstanding</p>
+            <p style="margin:4px 0 0;font-size:22px;font-weight:800;color:#f87171;">${money(data.totalOwed)}</p>
+            <p style="margin:2px 0 0;font-size:11px;color:#6b7280;">${membersOwing} member${membersOwing !== 1 ? 's' : ''} owe</p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td width="50%" style="padding:4px;">
+          <div style="background:#111827;border:1px solid #374151;border-left:3px solid #2563eb;border-radius:8px;padding:14px;">
+            <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">${data.monthLabel} Income</p>
+            <p style="margin:4px 0 0;font-size:22px;font-weight:800;color:#60a5fa;">${money(data.monthIncome)}</p>
+          </div>
+        </td>
+        <td width="50%" style="padding:4px;">
+          <div style="background:#111827;border:1px solid #374151;border-left:3px solid ${net >= 0 ? '#7c3aed' : '#f59e0b'};border-radius:8px;padding:14px;">
+            <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">${data.monthLabel} Net</p>
+            <p style="margin:4px 0 0;font-size:22px;font-weight:800;color:${net >= 0 ? '#a78bfa' : '#fbbf24'};">${net >= 0 ? '+' : ''}${money(net)}</p>
+          </div>
+        </td>
+      </tr>
+    </table>`
+
+  const memberRows = data.memberStatements
+    .map(
+      (m) => `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #374151;color:#f9fafb;font-weight:500;">${m.name}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #374151;text-align:right;color:#9ca3af;">${money(m.charged)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #374151;text-align:right;color:#6ee7b7;">${money(m.paid)}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #374151;text-align:right;">${balanceBadge(m.balance)}</td>
+      </tr>`
+    )
+    .join('')
+
+  const txRows = data.transactions
+    .slice(0, 15)
+    .map(
+      (t) => `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #374151;color:#6b7280;font-size:13px;">${t.date}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #374151;color:#d1d5db;font-size:13px;">${t.description}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #374151;text-align:right;font-size:13px;font-weight:600;color:${t.type === 'income' ? '#4ade80' : '#f87171'};">
+          ${t.type === 'income' ? '+' : '-'}${money(t.amount)}
+        </td>
+      </tr>`
+    )
+    .join('')
+
+  const html = layout(`
+    <h1 style="margin:0 0 6px;font-size:24px;font-weight:800;color:#f9fafb;">Treasurer's Report</h1>
+    <p style="color:#6b7280;font-size:13px;margin:0 0 24px;">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+
+    ${summaryCards}
+
+    <p style="margin:24px 0 8px;font-size:13px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;">Member Balances</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#111827;border:1px solid #374151;border-radius:8px;overflow:hidden;">
+      <tr style="background:#1f2937;">
+        <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;">Member</th>
+        <th style="padding:10px 12px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;">Charged</th>
+        <th style="padding:10px 12px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;">Paid</th>
+        <th style="padding:10px 12px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;">Status</th>
+      </tr>
+      ${memberRows}
+    </table>
+
+    ${
+      data.transactions.length > 0
+        ? `
+    <p style="margin:24px 0 8px;font-size:13px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;">${data.monthLabel} Transactions</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#111827;border:1px solid #374151;border-radius:8px;overflow:hidden;">
+      <tr style="background:#1f2937;">
+        <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;">Date</th>
+        <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;">Description</th>
+        <th style="padding:8px 12px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;">Amount</th>
+      </tr>
+      ${txRows}
+      <tr style="background:#1f2937;">
+        <td colspan="2" style="padding:10px 12px;font-weight:700;color:#d1d5db;">Net</td>
+        <td style="padding:10px 12px;text-align:right;font-weight:800;color:${net >= 0 ? '#4ade80' : '#f87171'};">${net >= 0 ? '+' : ''}${money(net)}</td>
+      </tr>
+    </table>`
+        : ''
+    }
+
+    <p style="color:#6b7280;font-size:13px;margin:24px 0 0;">Full ledger available in the admin dashboard.</p>
+  `)
+
+  return getResend().emails.send({
+    from: FROM,
+    to: Array.isArray(to) ? to : [to],
+    subject: `Treasurer Report — Think Big St. Louis — ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+    html,
+  })
+}

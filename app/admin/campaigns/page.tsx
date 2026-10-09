@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 import Link from 'next/link'
 
 type Segment = 'all' | 'invited' | 'visited' | 'applied'
@@ -49,8 +49,8 @@ const EMAIL_TEMPLATES = [
 ]
 
 export default function AdminCampaignsPage() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
+  const { user, loading: authLoading } = useAdminAuth()
+  const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<CampaignResult | null>(null)
   const [error, setError] = useState('')
@@ -63,15 +63,9 @@ export default function AdminCampaignsPage() {
   const [ctaUrl, setCtaUrl] = useState('')
 
   useEffect(() => {
-    (() => { const s = sessionStorage.getItem('tbg_user'); return s ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(s) }) }) : fetch('/api/auth/me', { credentials: 'include' }) })()
-      .then(async (res) => {
-        if (!res.ok) { window.location.href = '/member/login'; return }
-        const { user } = await res.json()
-        if (!user.is_admin) { window.location.href = '/member'; return }
-      })
-      .catch(() => window.location.href = '/member/login')
-      .finally(() => setLoading(false))
-  }, [router])
+    if (!user) return
+    setLoading(false)
+  }, [user])
 
   const applyTemplate = (tmpl: { label: string; message: string; subject?: string }) => {
     setMessage(tmpl.message)
@@ -105,7 +99,7 @@ export default function AdminCampaignsPage() {
     }
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <svg className="w-8 h-8 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 import Link from 'next/link'
 
 interface LogEntry {
@@ -43,7 +43,7 @@ const CHANNEL_STYLES: Record<string, string> = {
 }
 
 export default function SendLogPage() {
-  const router = useRouter()
+  const { user, loading: authLoading } = useAdminAuth()
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -52,16 +52,9 @@ export default function SendLogPage() {
   const [previewResult, setPreviewResult] = useState<string | null>(null)
 
   useEffect(() => {
-    (() => { const s = sessionStorage.getItem('tbg_user'); return s ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(s) }) }) : fetch('/api/auth/me', { credentials: 'include' }) })()
-      .then(async (res) => {
-        if (!res.ok) { window.location.href = '/member/login'; return }
-        const { user } = await res.json()
-        if (!user.is_admin) { window.location.href = '/member'; return }
-        await fetchLogs(1)
-      })
-      .catch(() => window.location.href = '/member/login')
-      .finally(() => setLoading(false))
-  }, [router])
+    if (!user) return
+    fetchLogs(1).finally(() => setLoading(false))
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchLogs = async (p: number) => {
     const res = await fetch(`/api/outreach-logs?page=${p}&limit=50`)
@@ -101,7 +94,7 @@ export default function SendLogPage() {
     setPreviewing(null)
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <svg className="w-8 h-8 text-brand-indigo animate-spin" fill="none" viewBox="0 0 24 24">

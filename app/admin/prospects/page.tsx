@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 import Link from 'next/link'
 
 interface Prospect {
@@ -26,7 +26,7 @@ interface Campaign {
 }
 
 export default function ProspectsBoard() {
-  const router = useRouter()
+  const { user, loading: authLoading } = useAdminAuth()
   const [loading, setLoading] = useState(true)
   const [prospects, setProspects] = useState<Prospect[]>([])
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
@@ -89,16 +89,9 @@ export default function ProspectsBoard() {
   }, [openCategories])
 
   useEffect(() => {
-    (() => { const s = sessionStorage.getItem('tbg_user'); return s ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(s) }) }) : fetch('/api/auth/me', { credentials: 'include' }) })()
-      .then(async (res) => {
-        if (!res.ok) { window.location.href = '/member/login'; return }
-        const { user } = await res.json()
-        if (!user.is_admin) { window.location.href = '/member'; return }
-        await fetchData()
-      })
-      .catch(() => window.location.href = '/member/login')
-      .finally(() => setLoading(false))
-  }, [router, fetchData])
+    if (!user) return
+    fetchData().finally(() => setLoading(false))
+  }, [user, fetchData])
 
   // Fetch prospects when campaign changes
   useEffect(() => {
@@ -232,7 +225,7 @@ export default function ProspectsBoard() {
     setCreatingCampaign(null)
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <svg className="w-8 h-8 text-brand-red animate-spin" fill="none" viewBox="0 0 24 24">

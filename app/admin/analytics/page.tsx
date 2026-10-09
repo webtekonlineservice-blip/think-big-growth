@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 import Link from 'next/link'
 
 interface Analytics {
@@ -26,23 +26,16 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function AdminAnalyticsPage() {
-  const router = useRouter()
+  const { user, loading: authLoading } = useAdminAuth()
   const [data, setData] = useState<Analytics | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    (() => { const s = sessionStorage.getItem('tbg_user'); return s ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(s) }) }) : fetch('/api/auth/me', { credentials: 'include' }) })()
-      .then(async (res) => {
-        if (!res.ok) { window.location.href = '/member/login'; return }
-        const { user } = await res.json()
-        if (!user.is_admin) { window.location.href = '/member'; return }
-
-        const r = await fetch('/api/analytics')
-        if (r.ok) setData(await r.json())
-      })
-      .catch(() => window.location.href = '/member/login')
+    if (!user) return
+    fetch('/api/analytics', { credentials: 'include' })
+      .then(async (r) => { if (r.ok) setData(await r.json()) })
       .finally(() => setLoading(false))
-  }, [router])
+  }, [user])
 
   if (loading) {
     return (

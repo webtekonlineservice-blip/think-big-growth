@@ -6,13 +6,14 @@ import Link from 'next/link'
 import Image from 'next/image'
 import {
   LayoutDashboard, Users, UserCircle, Send, Mail,
-  FlaskConical, BarChart3, ScrollText, Target, LogOut, Menu, Megaphone, CheckSquare,
+  FlaskConical, BarChart3, ScrollText, Target, LogOut, Menu, Megaphone, CheckSquare, Wallet,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/admin', Icon: LayoutDashboard },
   { label: 'Visitors', href: '/admin/visitors', Icon: Users },
   { label: 'Members', href: '/admin/members', Icon: UserCircle },
+  { label: 'Treasurer', href: '/admin/treasurer', Icon: Wallet },
   { label: 'Seats', href: '/admin/seats', Icon: CheckSquare },
   { label: 'Prospects', href: '/admin/prospects', Icon: Target },
   { label: 'Outbound', href: '/admin/outbound', Icon: Send },
@@ -94,7 +95,6 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
             href="/api/auth/logout"
             onClick={async (e) => {
               e.preventDefault()
-              sessionStorage.removeItem('tbg_user')
               await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
               window.location.href = '/'
             }}

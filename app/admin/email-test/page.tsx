@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 import Link from 'next/link'
 
 export default function EmailTestPage() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
+  const { user, loading: authLoading } = useAdminAuth()
+  const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [result, setResult] = useState<{ success?: boolean; error?: string; subject?: string } | null>(null)
 
@@ -17,16 +17,9 @@ export default function EmailTestPage() {
   const [testProfession, setTestProfession] = useState('Financial Advisor')
 
   useEffect(() => {
-    (() => { const s = sessionStorage.getItem('tbg_user'); return s ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(s) }) }) : fetch('/api/auth/me', { credentials: 'include' }) })()
-      .then(async (res) => {
-        if (!res.ok) { window.location.href = '/member/login'; return }
-        const { user } = await res.json()
-        if (!user.is_admin) { window.location.href = '/member'; return }
-        setTo(user.email)
-      })
-      .catch(() => window.location.href = '/member/login')
-      .finally(() => setLoading(false))
-  }, [router])
+    if (!user) return
+    setTo(user.email)
+  }, [user])
 
   const handleSend = async () => {
     setSending(true)
@@ -46,7 +39,7 @@ export default function EmailTestPage() {
     }
   }
 
-  if (loading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <svg className="w-8 h-8 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">

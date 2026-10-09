@@ -1,15 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useAdminAuth } from '@/hooks/useAdminAuth'
 
-interface SessionUser {
-  id: string
-  email: string
-  name: string
-  is_admin: boolean
-  invite_code: string
-}
+type SessionUser = import('@/hooks/useAdminAuth').AdminUser
 
 interface Campaign {
   id: string
@@ -108,34 +102,22 @@ interface DashboardData {
 }
 
 export default function AdminDashboard() {
-  const router = useRouter()
-  const [user, setUser] = useState<SessionUser | null>(null)
+  const { user, loading: authLoading } = useAdminAuth()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check sessionStorage first (set by login page) — avoids cookie timing issues.
-    // Fall back to /api/auth/me for direct navigation / page refresh.
-    const stored = sessionStorage.getItem('tbg_user')
-    const checkAuth = stored
-      ? Promise.resolve({ ok: true, json: async () => ({ user: JSON.parse(stored) }) } as Response)
-      : fetch('/api/auth/me', { credentials: 'include' })
+    if (!user) return
 
-    checkAuth
-      .then(async (res) => {
-        if (!res.ok) { window.location.href = '/member/login'; return }
-        const { user: u } = await res.json()
-        if (!u.is_admin) { window.location.href = '/member'; return }
-        setUser(u)
-
-        // Fetch all dashboard data in parallel
+    const load = async () => {
+      try {
         const [membersRes, visitorsRes, campaignsRes, prospectsRes, breakdownRes, seatsRes] = await Promise.all([
-          fetch('/api/members'),
-          fetch('/api/visitors'),
-          fetch('/api/prospects/campaigns'),
-          fetch('/api/prospects?limit=1'),
-          fetch('/api/prospects/breakdown'),
-          fetch('/api/seats'),
+          fetch('/api/members', { credentials: 'include' }),
+          fetch('/api/visitors', { credentials: 'include' }),
+          fetch('/api/prospects/campaigns', { credentials: 'include' }),
+          fetch('/api/prospects?limit=1', { credentials: 'include' }),
+          fetch('/api/prospects/breakdown', { credentials: 'include' }),
+          fetch('/api/seats', { credentials: 'include' }),
         ])
 
         const members = membersRes.ok ? await membersRes.json() : []
@@ -143,7 +125,8 @@ export default function AdminDashboard() {
         const campaigns = campaignsRes.ok ? await campaignsRes.json() : []
         const prospectsData = prospectsRes.ok ? await prospectsRes.json() : { total: 0 }
         const breakdown = breakdownRes.ok ? await breakdownRes.json() : null
-        const seatsData: Array<{ status: string }> = seatsRes.ok ? await seatsRes.json() : []
+        const seatsJson = seatsRes.ok ? await seatsRes.json() : {}
+        const seatsData: Array<{ status: string }> = Array.isArray(seatsJson) ? seatsJson : (seatsJson.seats ?? [])
         const seats: SeatSummary = {
           filled: seatsData.filter((s) => s.status === 'filled').length,
           active: seatsData.filter((s) => s.status === 'active').length,
@@ -175,12 +158,15 @@ export default function AdminDashboard() {
             created_at: v.created_at,
           })),
         })
-      })
-      .catch(() => window.location.href = '/member/login')
-      .finally(() => setLoading(false))
-  }, [router])
+      } finally {
+        setLoading(false)
+      }
+    }
 
-  if (loading || !data) {
+    load()
+  }, [user])
+
+  if (authLoading || loading || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <svg className="w-8 h-8 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">
