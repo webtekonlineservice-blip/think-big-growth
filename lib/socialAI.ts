@@ -10,7 +10,7 @@
  */
 
 export type SocialPlatform = 'facebook' | 'linkedin' | 'instagram'
-export type SocialType = 'meeting_promo' | 'speaker' | 'spotlight' | 'visitor_invite' | 'win' | 'custom'
+export type SocialType = 'meeting_promo' | 'speaker' | 'spotlight' | 'visitor_invite' | 'win' | 'open_seats' | 'custom'
 
 export interface CaptionContext {
   type: SocialType
@@ -26,6 +26,7 @@ export interface CaptionContext {
     spotlightRole?: string
     spotlightCompany?: string
     winText?: string
+    openSeats?: string   // comma-separated list of open professions we're recruiting
     customBrief?: string
   }
 }
@@ -48,6 +49,7 @@ const TYPE_BRIEF: Record<SocialType, string> = {
   spotlight: 'Celebrate a member — who they are, what they do, and why the chapter values them. Encourage people to use/refer their business.',
   visitor_invite: 'Invite prospective guests to a visitor day. Lower the barrier, make it exciting and no-pressure.',
   win: 'Celebrate a chapter win / referral success to show the real value members get. Prompt others to want in.',
+  open_seats: 'Recruit for the open seats. The chapter is looking for exactly ONE great business per listed profession/category (BNI is one-per-category, so these are exclusive opportunities). Make local business owners in those categories feel personally invited and excited to claim their exclusive seat. List the open categories clearly.',
   custom: 'Promote the chapter and its value based on the brief provided.',
 }
 

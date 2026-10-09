@@ -172,7 +172,7 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
       </div>
 
       {mode === 'weekly' && <WeeklyBillForm members={members} onDone={async () => { setMode(null); await refresh() }} onCancel={() => setMode(null)} />}
-      {mode === 'payment' && <PaymentForm members={members} onDone={async () => { setMode(null); await refresh() }} onCancel={() => setMode(null)} />}
+      {mode === 'payment' && <PaymentForm members={members} ledger={ledger} onDone={async () => { setMode(null); await refresh() }} onCancel={() => setMode(null)} />}
 
       {/* Member rows */}
       <div className="space-y-2">
@@ -454,21 +454,49 @@ function WeeklyBillForm({ members, onDone, onCancel }: { members: Member[]; onDo
   )
 }
 
-function PaymentForm({ members, onDone, onCancel }: { members: Member[]; onDone: () => Promise<void>; onCancel: () => void }) {
-  const [form, setForm] = useState({ member_id: '', date: today(), amount: '', notes: '' })
+function PaymentForm({ members, ledger, onDone, onCancel }: { members: Member[]; ledger: LedgerEntry[]; onDone: () => Promise<void>; onCancel: () => void }) {
+  const [who, setWho] = useState<'member' | 'visitor'>('member')
+  const [form, setForm] = useState({ member_id: '', visitorName: '', date: today(), amount: '', notes: '' })
   const [saving, setSaving] = useState(false)
 
+  // Visitor names seen on the ledger (charges with no member link), newest first.
+  const visitorNames = Array.from(
+    new Map(
+      ledger
+        .filter((e) => e.member_id === null && e.type === 'charge')
+        .sort((a, b) => (a.date < b.date ? 1 : -1))
+        .map((e) => [e.member_name, true])
+    ).keys()
+  )
+
+  const payerName = who === 'member'
+    ? members.find((m) => m.id === form.member_id)?.name
+    : form.visitorName.trim()
+
+  const canSubmit = !!payerName && !!form.amount && !isNaN(parseFloat(form.amount))
+
   const submit = async () => {
-    if (!form.member_id || !form.amount) return
+    if (!canSubmit) return
     setSaving(true)
-    const member = members.find((m) => m.id === form.member_id)
+    const amount = parseFloat(form.amount)
     await fetch('/api/treasurer/ledger', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ member_id: form.member_id, member_name: member?.name, type: 'payment', amount: parseFloat(form.amount), date: form.date, description: 'Payment / Prepay', status: 'paid', notes: form.notes }),
+      body: JSON.stringify({
+        member_id: who === 'member' ? form.member_id : null,
+        member_name: payerName,
+        type: 'payment', amount, date: form.date,
+        description: who === 'member' ? 'Payment / Prepay' : 'Visitor Payment',
+        status: 'paid', notes: form.notes,
+      }),
     })
     await fetch('/api/treasurer/transactions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'income', category: 'Member Payment', description: `Payment from ${member?.name}`, amount: parseFloat(form.amount), date: form.date }),
+      body: JSON.stringify({
+        type: 'income',
+        category: who === 'member' ? 'Member Payment' : 'Guest Fee',
+        description: `${who === 'member' ? 'Payment' : 'Visitor payment'} from ${payerName}`,
+        amount, date: form.date,
+      }),
     })
     setSaving(false)
     await onDone()
@@ -476,19 +504,33 @@ function PaymentForm({ members, onDone, onCancel }: { members: Member[]; onDone:
 
   return (
     <div className={CARD + ' p-4 space-y-4'}>
-      <h3 className="text-sm font-semibold text-white">Record Member Payment</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div><label className="block text-xs text-gray-500 mb-1">Member</label>
-          <select value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))} className={INPUT}>
-            <option value="">Select…</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-white">Record {who === 'member' ? 'Member' : 'Visitor'} Payment</h3>
+        <div className="flex rounded-lg overflow-hidden border border-gray-700">
+          {(['member', 'visitor'] as const).map((w) => (
+            <button key={w} onClick={() => setWho(w)} className={`px-3 py-1.5 text-xs font-medium capitalize transition ${who === w ? 'bg-brand-blue text-white' : 'bg-gray-900 text-gray-500 hover:text-gray-300'}`}>{w}</button>
+          ))}
         </div>
-        <div><label className="block text-xs text-gray-500 mb-1">Date</label><input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={INPUT} /></div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {who === 'member' ? (
+          <div><label className="block text-xs text-gray-500 mb-1">Member</label>
+            <select value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))} className={INPUT}>
+              <option value="">Select…</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+        ) : (
+          <div><label className="block text-xs text-gray-500 mb-1">Visitor</label>
+            <input list="visitor-names" value={form.visitorName} onChange={(e) => setForm((f) => ({ ...f, visitorName: e.target.value }))} placeholder="Visitor name" className={INPUT} />
+            <datalist id="visitor-names">{visitorNames.map((n) => <option key={n} value={n} />)}</datalist>
+          </div>
+        )}
+        <div><label className="block text-xs text-gray-500 mb-1">Date</label><input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} onClick={(e) => e.currentTarget.showPicker?.()} className={`${INPUT} cursor-pointer`} /></div>
         <div><label className="block text-xs text-gray-500 mb-1">Amount ($)</label><input type="number" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="125.00" className={INPUT} /></div>
         <div><label className="block text-xs text-gray-500 mb-1">Notes</label><input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Cash, Venmo…" className={INPUT} /></div>
       </div>
       <div className="flex gap-2">
-        <button onClick={submit} disabled={saving} className={BTN_PRIMARY}>{saving ? 'Saving…' : 'Record Payment'}</button>
+        <button onClick={submit} disabled={saving || !canSubmit} className={BTN_PRIMARY}>{saving ? 'Saving…' : 'Record Payment'}</button>
         <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-800 transition">Cancel</button>
       </div>
     </div>
@@ -957,6 +999,7 @@ const SOCIAL_TYPES = [
   { id: 'spotlight', label: 'Member Spotlight' },
   { id: 'visitor_invite', label: 'Visitor-Day Invite' },
   { id: 'win', label: 'Win / Testimonial' },
+  { id: 'open_seats', label: 'Open Seats — Who We\'re Looking For' },
   { id: 'custom', label: 'Custom' },
 ] as const
 
@@ -969,8 +1012,9 @@ function generateCaption(opts: {
   speakers: Speaker[]
   spotlightId?: string
   winText?: string
+  openSeats?: string[]
 }): string {
-  const { type, members, speakers, spotlightId, winText } = opts
+  const { type, members, speakers, spotlightId, winText, openSeats } = opts
   const todayIso = today()
 
   switch (type) {
@@ -1041,6 +1085,22 @@ function generateCaption(opts: {
         '#ChapterWin #BNI #ThinkBigStL #Referrals #StLouisBusiness',
       ].join('\n')
 
+    case 'open_seats': {
+      const seats = (openSeats ?? []).filter(Boolean)
+      const list = seats.length ? seats.map((s) => `• ${s}`).join('\n') : '• (loading open categories…)'
+      return [
+        '🪑 Open Seats — We\'re Looking For You!',
+        '',
+        'Our chapter holds just ONE seat per profession — and these categories are wide open:',
+        '',
+        list,
+        '',
+        `If that\'s your business, this is an exclusive referral opportunity with no competition inside the room. Come claim your seat — ${MEETING_LINE}.`,
+        '',
+        '#BNI #ThinkBigStL #OpenSeat #StLouisBusiness #Referrals #GrowYourBusiness',
+      ].join('\n')
+    }
+
     default:
       return ''
   }
@@ -1059,16 +1119,30 @@ function SocialTab({ members, speakers, social, refresh }: {
   const [saving, setSaving] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState('')
+  const [openSeats, setOpenSeats] = useState<string[]>([])
+
+  // Load the open/unfilled seats (slide #79 — "who we're looking for").
+  useEffect(() => {
+    fetch('/api/seats', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const seats = Array.isArray(data) ? data : data?.seats
+        if (Array.isArray(seats)) {
+          setOpenSeats(seats.filter((s: { status: string }) => s.status === 'open' || s.status === 'paused' || s.status === 'active').map((s: { profession: string }) => s.profession))
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const regenerate = () => {
-    setContent(generateCaption({ type, members, speakers, spotlightId: spotlightId || members[0]?.id, winText }))
+    setContent(generateCaption({ type, members, speakers, spotlightId: spotlightId || members[0]?.id, winText, openSeats }))
   }
 
   // Auto-generate the template caption whenever the inputs change (fallback/base).
   useEffect(() => {
-    setContent(generateCaption({ type, members, speakers, spotlightId: spotlightId || members[0]?.id, winText }))
+    setContent(generateCaption({ type, members, speakers, spotlightId: spotlightId || members[0]?.id, winText, openSeats }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, spotlightId, winText, members, speakers])
+  }, [type, spotlightId, winText, members, speakers, openSeats])
 
   // Build the facts the AI is allowed to use from current chapter data.
   const buildFacts = () => {
@@ -1086,6 +1160,7 @@ function SocialTab({ members, speakers, social, refresh }: {
       spotlightRole: type === 'spotlight' ? spot?.role : undefined,
       spotlightCompany: type === 'spotlight' ? spot?.company : undefined,
       winText: type === 'win' ? winText.trim() || undefined : undefined,
+      openSeats: type === 'open_seats' && openSeats.length ? openSeats.join(', ') : undefined,
     }
   }
 
@@ -1102,11 +1177,11 @@ function SocialTab({ members, speakers, social, refresh }: {
       } else {
         // Fall back to the local template, surface a soft notice.
         setAiError('AI unavailable — using template. ' + (data.error ? '' : ''))
-        setContent(generateCaption({ type, members, speakers, spotlightId: spotlightId || members[0]?.id, winText }))
+        setContent(generateCaption({ type, members, speakers, spotlightId: spotlightId || members[0]?.id, winText, openSeats }))
       }
     } catch {
       setAiError('AI request failed — using template.')
-      setContent(generateCaption({ type, members, speakers, spotlightId: spotlightId || members[0]?.id, winText }))
+      setContent(generateCaption({ type, members, speakers, spotlightId: spotlightId || members[0]?.id, winText, openSeats }))
     } finally {
       setAiLoading(false)
     }

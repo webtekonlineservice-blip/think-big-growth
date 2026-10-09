@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 const PLATFORMS: SocialPlatform[] = ['facebook', 'linkedin', 'instagram']
-const TYPES: SocialType[] = ['meeting_promo', 'speaker', 'spotlight', 'visitor_invite', 'win', 'custom']
+const TYPES: SocialType[] = ['meeting_promo', 'speaker', 'spotlight', 'visitor_invite', 'win', 'open_seats', 'custom']
 
 /**
  * POST /api/treasurer/social/generate

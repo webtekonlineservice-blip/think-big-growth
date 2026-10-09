@@ -1,7 +1,7 @@
 import mongoose, { Schema, Document, Model } from 'mongoose'
 
 export type SocialPlatform = 'facebook' | 'linkedin' | 'instagram'
-export type SocialType = 'meeting_promo' | 'speaker' | 'spotlight' | 'visitor_invite' | 'win' | 'custom'
+export type SocialType = 'meeting_promo' | 'speaker' | 'spotlight' | 'visitor_invite' | 'win' | 'open_seats' | 'custom'
 export type SocialStatus = 'idea' | 'drafted' | 'scheduled' | 'posted'
 
 export interface ISocialPost extends Document {
@@ -22,7 +22,7 @@ const SocialPostSchema = new Schema<ISocialPost>(
     platform: { type: String, enum: SOCIAL_PLATFORMS, required: true },
     type: {
       type: String,
-      enum: ['meeting_promo', 'speaker', 'spotlight', 'visitor_invite', 'win', 'custom'],
+      enum: ['meeting_promo', 'speaker', 'spotlight', 'visitor_invite', 'win', 'open_seats', 'custom'],
       default: 'custom',
     },
     content: { type: String, default: '' },
