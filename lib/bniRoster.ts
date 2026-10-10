@@ -50,34 +50,7 @@ function lastSegment(category: string): string {
  * Throws if the endpoint is unreachable or returns no parseable rows.
  */
 export async function fetchBniRoster(): Promise<BniMember[]> {
-  const body = new URLSearchParams({
-    pageMode: 'Live_Site',
-    chapterId: CHAPTER_ID,
-    languageLocaleCode: 'en_US',
-    website_type: WEBSITE_TYPE,
-    website_id: WEBSITE_ID,
-    mappedWidgetSettings: '[]',
-    planyourvisit: 'y',
-  })
-
-  const res = await fetch(`${BASE_URL}/bnicms/v3/frontend/chapterdetail/display`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      'X-Requested-With': 'XMLHttpRequest',
-      Referer: `${BASE_URL}/en-US/chapterdetail?chapterId=${encodeURIComponent(CHAPTER_ID)}`,
-      'User-Agent': 'Mozilla/5.0 (compatible; ThinkBigRosterSync/1.0)',
-    },
-    body: body.toString(),
-    // The endpoint is public; no cookies required.
-    cache: 'no-store',
-  })
-
-  if (!res.ok) {
-    throw new Error(`BNI roster endpoint returned ${res.status}`)
-  }
-
-  const html = await res.text()
+  const html = await fetchBniPageHtml()
   return parseBniRoster(html)
 }
 
@@ -109,4 +82,70 @@ export function parseBniRoster(html: string): BniMember[] {
   }
 
   return members
+}
+
+/**
+ * Parse leadership headshots from the chapter page.
+ * Photos appear only in the "Chapter Leadership" cards, each as a
+ * networkViewProfileImage URL followed by an <h4 title="Name">.
+ * Returns a map of normalized-name → absolute image URL (default avatars skipped).
+ */
+export function parseBniPhotos(html: string): { name: string; url: string }[] {
+  const pairs = Array.from(
+    html.matchAll(/networkViewProfileImage\/([0-9a-f]+)\.jpg[\s\S]*?<h4[^>]*title="([^"]+)"/gi)
+  )
+  const out: { name: string; url: string }[] = []
+  const seen = new Set<string>()
+  for (const m of pairs) {
+    const id = m[1]
+    const name = m[2].replace(/\s+/g, ' ').trim()
+    if (!id || !name || seen.has(name)) continue
+    seen.add(name)
+    out.push({ name, url: `https://bniconnectglobal.com/web/open/networkViewProfileImage/${id}.jpg` })
+  }
+  return out
+}
+
+/**
+ * Fetch the chapter page HTML once (raw), for callers that want both the
+ * roster and the leadership photos without a second request.
+ */
+export async function fetchBniPageHtml(): Promise<string> {
+  const body = new URLSearchParams({
+    pageMode: 'Live_Site',
+    chapterId: CHAPTER_ID,
+    languageLocaleCode: 'en_US',
+    website_type: WEBSITE_TYPE,
+    website_id: WEBSITE_ID,
+    mappedWidgetSettings: '[]',
+    planyourvisit: 'y',
+  })
+  const res = await fetch(`${BASE_URL}/bnicms/v3/frontend/chapterdetail/display`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      Referer: `${BASE_URL}/en-US/chapterdetail?chapterId=${encodeURIComponent(CHAPTER_ID)}`,
+      'User-Agent': 'Mozilla/5.0 (compatible; ThinkBigRosterSync/1.0)',
+    },
+    body: body.toString(),
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(`BNI page returned ${res.status}`)
+  return res.text()
+}
+
+/** Download an image URL (following redirects) and return a base64 data URI. */
+export async function fetchImageAsDataUri(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, { redirect: 'follow', headers: { 'User-Agent': 'Mozilla/5.0' } })
+    if (!res.ok) return null
+    const type = res.headers.get('content-type') || 'image/jpeg'
+    if (!type.startsWith('image/')) return null
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length < 1000) return null // skip tiny/placeholder responses
+    return `data:${type};base64,${buf.toString('base64')}`
+  } catch {
+    return null
+  }
 }

@@ -20,7 +20,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   try {
     const body = await req.json()
-    const allowedFields = ['name', 'email', 'role', 'company', 'phone', 'invite_code', 'display_order', 'is_admin'] as const
+    const allowedFields = ['name', 'email', 'role', 'company', 'phone', 'invite_code', 'display_order', 'is_admin', 'logo', 'photo'] as const
     const updates: Record<string, unknown> = {}
 
     for (const field of allowedFields) {
@@ -61,6 +61,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       invite_code: member.invite_code,
       display_order: member.display_order,
       is_admin: member.is_admin,
+      logo: member.logo ?? '',
+      photo: member.photo ?? '',
     })
   } catch (err) {
     console.error('PATCH /api/members/[id] error:', err)

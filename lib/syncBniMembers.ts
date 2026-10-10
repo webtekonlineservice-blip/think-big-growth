@@ -13,7 +13,7 @@ import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import { connectDB } from '@/lib/mongodb'
 import Member from '@/lib/models/Member'
-import { fetchBniRoster, BniMember } from '@/lib/bniRoster'
+import { fetchBniPageHtml, parseBniRoster, parseBniPhotos, fetchImageAsDataUri, BniMember } from '@/lib/bniRoster'
 
 export interface SyncChange {
   name: string
@@ -27,6 +27,7 @@ export interface SyncResult {
   added: SyncChange[]
   updated: SyncChange[]
   flagged_for_removal: SyncChange[]   // in DB but no longer on BNI (not deleted)
+  photos_added: SyncChange[]          // members whose headshot was pulled from BNI leadership
   unchanged: number
 }
 
@@ -63,7 +64,9 @@ function uniqueSlug(base: string, taken: Set<string>): string {
 export async function syncBniMembers(opts: { dryRun?: boolean } = {}): Promise<SyncResult> {
   const { dryRun = false } = opts
 
-  const roster = await fetchBniRoster()
+  const html = await fetchBniPageHtml()
+  const roster = parseBniRoster(html)
+  const photos = parseBniPhotos(html)   // leadership headshots (name → url)
   if (roster.length === 0) {
     throw new Error('BNI roster returned 0 members — refusing to sync (possible parse/endpoint failure).')
   }
@@ -75,10 +78,12 @@ export async function syncBniMembers(opts: { dryRun?: boolean } = {}): Promise<S
   const takenEmails = new Set(dbMembers.map((m) => m.email.toLowerCase()))
   const takenSlugs = new Set(dbMembers.map((m) => m.invite_code))
   const bniNames = new Set(roster.map((r) => normName(r.name)))
+  const photoByName = new Map(photos.map((p) => [normName(p.name), p.url]))
 
   const added: SyncChange[] = []
   const updated: SyncChange[] = []
   const flagged_for_removal: SyncChange[] = []
+  const photos_added: SyncChange[] = []
   let unchanged = 0
 
   // ── Added / Updated ─────────────────────────────────────────────
@@ -138,6 +143,23 @@ export async function syncBniMembers(opts: { dryRun?: boolean } = {}): Promise<S
     }
   }
 
+  // ── Leadership headshots → member photo (only if member has none) ──
+  if (photoByName.size > 0) {
+    // Re-query so newly added members are included and we see current photos.
+    const current = await Member.find().select('name photo').lean()
+    for (const m of current) {
+      if (m.photo) continue
+      const url = photoByName.get(normName(m.name))
+      if (!url) continue
+      if (dryRun) { photos_added.push({ name: m.name }); continue }
+      const dataUri = await fetchImageAsDataUri(url)
+      if (dataUri) {
+        await Member.updateOne({ _id: m._id }, { $set: { photo: dataUri } })
+        photos_added.push({ name: m.name })
+      }
+    }
+  }
+
   return {
     ran_at: new Date().toISOString(),
     bni_count: roster.length,
@@ -145,6 +167,7 @@ export async function syncBniMembers(opts: { dryRun?: boolean } = {}): Promise<S
     added,
     updated,
     flagged_for_removal,
+    photos_added,
     unchanged,
   }
 }

@@ -65,6 +65,8 @@ export async function GET(req: NextRequest) {
       invite_code: m.invite_code,
       display_order: m.display_order,
       is_admin: m.is_admin,
+      logo: m.logo ?? '',
+      photo: m.photo ?? '',
       created_at: m.created_at.toISOString(),
     }))
 
@@ -87,7 +89,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { name, email, password, role, company, phone, invite_code, is_admin, display_order } = body
+    const { name, email, password, role, company, phone, invite_code, is_admin, display_order, logo, photo } = body
 
     if (!name?.trim() || !email?.trim() || !password?.trim() || !invite_code?.trim()) {
       return NextResponse.json({ error: 'name, email, password and invite_code are required.' }, { status: 400 })
@@ -121,6 +123,8 @@ export async function POST(req: NextRequest) {
       invite_code: invite_code.trim(),
       is_admin: is_admin ?? false,
       display_order: display_order ?? 0,
+      logo: logo ?? '',
+      photo: photo ?? '',
     })
 
     return NextResponse.json({

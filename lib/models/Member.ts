@@ -10,6 +10,8 @@ export interface IMember extends Document {
   invite_code: string
   display_order: number
   is_admin: boolean
+  logo: string          // base64 data URI of the member's business logo (optional)
+  photo: string         // base64 data URI of the member's headshot (optional)
   created_at: Date
 }
 
@@ -24,6 +26,8 @@ const MemberSchema = new Schema<IMember>(
     invite_code: { type: String, required: true, unique: true },
     display_order: { type: Number, default: 0 },
     is_admin: { type: Boolean, default: false },
+    logo: { type: String, default: '' },
+    photo: { type: String, default: '' },
     created_at: { type: Date, default: Date.now },
   },
   { timestamps: false }

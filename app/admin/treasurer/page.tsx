@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
+import SocialGraphic, { GraphicData } from '@/components/SocialGraphic'
 import {
   Wallet, DollarSign, BarChart3, Plus, Trash2, Mail, Download,
   ChevronDown, ChevronUp, X, Send, Loader2, Copy, Check, Mic, Presentation, Share2,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-interface Member { id: string; name: string; company: string; role?: string }
+interface Member { id: string; name: string; company: string; role?: string; logo?: string; photo?: string }
 interface LedgerEntry {
   id: string; member_id: string | null; member_name: string
   type: 'opening' | 'charge' | 'payment'; description: string
@@ -685,23 +686,47 @@ function ReportTab({ members, ledger, transactions, userEmail, startingBalance }
         <StatCard label="Net (mo)" value={`${net >= 0 ? '+' : ''}${money(net)}`} accent={net >= 0 ? 'border-purple-500' : 'border-orange-500'} color={net >= 0 ? 'text-purple-400' : 'text-orange-400'} />
       </div>
 
-      <div className={CARD + ' overflow-hidden'}>
-        <div className="px-4 py-3 border-b border-gray-700 bg-gray-900/40"><h3 className="text-sm font-semibold text-white">Member Balances</h3></div>
-        <div className="divide-y divide-gray-700/50">
-          {statements.map((m) => (
-            <div key={m.name} className="flex items-center justify-between px-4 py-2.5">
-              <span className="text-sm text-gray-200">{m.name}</span>
-              <div className="flex items-center gap-4 text-xs">
-                <span className="text-gray-500">Charged {money(m.charged)}</span>
-                <span className="text-green-400">Paid {money(m.paid)}</span>
-                <span className={`font-semibold ${!m.hasActivity ? 'text-gray-500' : m.balance > 0 ? 'text-red-400' : m.balance < 0 ? 'text-brand-blue' : 'text-green-400'}`}>
-                  {!m.hasActivity ? 'No activity' : m.balance > 0 ? `Owes ${money(m.balance)}` : m.balance < 0 ? `+${money(Math.abs(m.balance))}` : 'Paid Up'}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
+      <MemberBalances statements={statements} />
+    </div>
+  )
+}
+
+function MemberBalances({ statements }: { statements: { name: string; charged: number; paid: number; balance: number; hasActivity: boolean }[] }) {
+  const [owingOnly, setOwingOnly] = useState(false)
+  const owingCount = statements.filter((m) => m.balance > 0).length
+  const shown = owingOnly ? statements.filter((m) => m.balance > 0) : statements
+
+  const badge = (m: typeof statements[number]) => {
+    if (!m.hasActivity) return { text: '—', cls: 'text-gray-600' }
+    if (m.balance > 0) return { text: money(m.balance), cls: 'text-red-400' }
+    if (m.balance < 0) return { text: `+${money(Math.abs(m.balance))}`, cls: 'text-brand-blue' }
+    return { text: 'Paid', cls: 'text-green-400' }
+  }
+
+  return (
+    <div className={CARD + ' overflow-hidden'}>
+      <div className="px-4 py-2.5 border-b border-gray-700 bg-gray-900/40 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-white">Member Balances</h3>
+        <button
+          onClick={() => setOwingOnly((v) => !v)}
+          className={`text-xs px-2.5 py-1 rounded-md border transition ${owingOnly ? 'bg-red-500/15 border-red-500/30 text-red-400' : 'border-gray-700 text-gray-400 hover:text-gray-200'}`}
+        >
+          {owingOnly ? `Showing owing (${owingCount})` : `Owing only (${owingCount})`}
+        </button>
       </div>
+      {/* Compact multi-column grid — name + balance chip only; full breakdown lives in the ledger tab */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-0.5 p-3">
+        {shown.map((m) => {
+          const b = badge(m)
+          return (
+            <div key={m.name} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-gray-800/40">
+              <span className="text-sm text-gray-300 truncate pr-2">{m.name}</span>
+              <span className={`text-sm font-semibold tabular-nums ${b.cls}`}>{b.text}</span>
+            </div>
+          )
+        })}
+      </div>
+      {shown.length === 0 && <p className="text-xs text-gray-500 px-4 pb-3">No members owing — all paid up. 🎉</p>}
     </div>
   )
 }
@@ -992,6 +1017,7 @@ function SpeakersTab({ members, speakers, refresh }: { members: Member[]; speake
 
 // ─── Social Tab ─────────────────────────────────────────────────────────────
 const MEETING_LINE = 'Think Big St. Louis · Thursdays 11:30 AM · Mike Duffy\'s Pub & Grill, Kirkwood'
+const MEETING_LINE_SHORT = "Thursdays 11:30 AM · Mike Duffy's Pub & Grill, Kirkwood"
 
 const SOCIAL_TYPES = [
   { id: 'meeting_promo', label: 'Weekly Meeting Promo' },
@@ -1164,6 +1190,33 @@ function SocialTab({ members, speakers, social, refresh }: {
     }
   }
 
+  // Build the BNI-branded graphic card for the current post type.
+  const graphicData = ((): GraphicData => {
+    const todayIso = today()
+    const nextSpeaker = [...speakers].filter((s) => s.date >= todayIso).sort((a, b) => (a.date < b.date ? -1 : 1))[0]
+    const speakerMember = members.find((m) => m.id === nextSpeaker?.member_id)
+    const spot = members.find((m) => m.id === spotlightId) ?? members[0]
+    switch (type) {
+      case 'open_seats':
+        return { kind: 'open_seats' as const, title: 'Seats Open', subtitle: 'One business per profession — exclusive, no competition.', lines: openSeats.slice(0, 8), caption: content || undefined, footerCta: `Claim your seat · ${MEETING_LINE_SHORT}` }
+      case 'speaker': {
+        const sName = nextSpeaker && nextSpeaker.name !== 'Speaker Name' ? nextSpeaker.name : 'This Week'
+        const sCompany = speakerMember?.company || undefined
+        return { kind: 'speaker' as const, title: sName, subtitle: sCompany, caption: content || undefined, memberPhoto: speakerMember?.photo || undefined, memberLogo: speakerMember?.logo || undefined, footerCta: MEETING_LINE_SHORT }
+      }
+      case 'spotlight': {
+        const initials = spot ? spot.name.split(' ').map((s: string) => s[0]).slice(0, 2).join('') : 'TB'
+        return { kind: 'spotlight' as const, title: spot?.name || 'Member Spotlight', subtitle: spot?.company || undefined, lines: spot?.role ? [spot.role] : [], caption: content || undefined, memberPhoto: spot?.photo || undefined, memberLogo: spot?.logo || undefined, initials, footerCta: undefined }
+      }
+      case 'visitor_invite':
+        return { kind: 'visitor_invite' as const, title: "You're Invited", subtitle: 'Be our guest — meet trusted local pros.', caption: content || undefined, footerCta: MEETING_LINE_SHORT }
+      case 'win':
+        return { kind: 'win' as const, title: 'Chapter Win', subtitle: winText.trim() || undefined, caption: content || undefined, footerCta: MEETING_LINE_SHORT }
+      default:
+        return { kind: 'meeting_promo' as const, title: 'Join Us Thursday', subtitle: undefined, caption: content || undefined, footerCta: MEETING_LINE_SHORT }
+    }
+  })()
+
   const generateAI = async () => {
     setAiLoading(true); setAiError('')
     try {
@@ -1278,6 +1331,12 @@ function SocialTab({ members, speakers, social, refresh }: {
           <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={9}
             className={`${INPUT} font-mono leading-relaxed`} />
           {aiError && <p className="text-xs text-yellow-400 mt-1">{aiError}</p>}
+        </div>
+
+        {/* BNI-branded graphic */}
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Graphic</label>
+          <SocialGraphic data={graphicData} />
         </div>
 
         <div className="flex flex-wrap gap-2">

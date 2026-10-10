@@ -14,6 +14,8 @@ interface Member {
   invite_code: string
   display_order: number
   is_admin: boolean
+  photo?: string
+  logo?: string
 }
 
 const EMPTY_FORM = {
@@ -26,6 +28,8 @@ const EMPTY_FORM = {
   invite_code: '',
   is_admin: false,
   display_order: 0,
+  photo: '',
+  logo: '',
 }
 
 export default function AdminMembersPage() {
@@ -115,6 +119,8 @@ export default function AdminMembersPage() {
       invite_code: m.invite_code,
       is_admin: m.is_admin,
       display_order: m.display_order,
+      photo: m.photo ?? '',
+      logo: m.logo ?? '',
     })
     setError('')
     setSuccess('')
@@ -293,7 +299,17 @@ export default function AdminMembersPage() {
                   key={m.id}
                   className={`${i < members.length - 1 ? 'border-b border-gray-700/50' : ''} hover:bg-gray-700/20 transition-colors`}
                 >
-                  <td className="px-4 pl-6 py-3 text-white font-medium">{m.name}</td>
+                  <td className="px-4 pl-6 py-3">
+                    <div className="flex items-center gap-3">
+                      {m.photo
+                        ? <img src={m.photo} alt={m.name} className="w-9 h-9 rounded-full object-cover border border-gray-700 shrink-0" />
+                        : <div className="w-9 h-9 rounded-full bg-brand-red/20 border border-brand-red/30 flex items-center justify-center text-xs font-bold text-brand-red shrink-0">
+                            {m.name.split(' ').map((s: string) => s[0]).slice(0, 2).join('')}
+                          </div>
+                      }
+                      <span className="text-white font-medium">{m.name}</span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <p className="text-gray-300 text-sm">{m.role || '—'}</p>
                     <p className="text-gray-500 text-xs">{m.company || '—'}</p>
@@ -399,6 +415,40 @@ export default function AdminMembersPage() {
 
               {error && <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
               {success && <p className="text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">{success}</p>}
+
+              {/* Photo & Logo uploads */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="label">Headshot Photo</label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {form.photo && <img src={form.photo} alt="headshot" className="w-10 h-10 rounded-full object-cover border border-gray-700" />}
+                    <label className="cursor-pointer text-xs text-brand-blue hover:underline">
+                      {form.photo ? 'Replace' : 'Upload photo'}
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                        const file = e.target.files?.[0]; if (!file) return
+                        const r = new FileReader(); r.onload = () => setForm((f) => ({ ...f, photo: r.result as string })); r.readAsDataURL(file)
+                      }} />
+                    </label>
+                    {form.photo && <button type="button" onClick={() => setForm((f) => ({ ...f, photo: '' }))} className="text-xs text-gray-500 hover:text-red-400">Remove</button>}
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">Avatar on social graphics</p>
+                </div>
+                <div>
+                  <label className="label">Business Logo</label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {form.logo && <img src={form.logo} alt="logo" className="w-10 h-10 object-contain border border-gray-700 rounded bg-white p-0.5" />}
+                    <label className="cursor-pointer text-xs text-brand-blue hover:underline">
+                      {form.logo ? 'Replace' : 'Upload logo'}
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                        const file = e.target.files?.[0]; if (!file) return
+                        const r = new FileReader(); r.onload = () => setForm((f) => ({ ...f, logo: r.result as string })); r.readAsDataURL(file)
+                      }} />
+                    </label>
+                    {form.logo && <button type="button" onClick={() => setForm((f) => ({ ...f, logo: '' }))} className="text-xs text-gray-500 hover:text-red-400">Remove</button>}
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">Business logo on spotlight card</p>
+                </div>
+              </div>
 
               <div className="flex gap-3 justify-end pt-2">
                 <button type="button" onClick={closeModal} className="btn-ghost px-4 py-2 text-sm">Cancel</button>

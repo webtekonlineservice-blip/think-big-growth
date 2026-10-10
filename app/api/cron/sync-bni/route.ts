@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
       added: result.added.length,
       updated: result.updated.length,
       flagged: result.flagged_for_removal.length,
+      photos: result.photos_added.length,
     })
     return NextResponse.json({ dryRun, ...result })
   } catch (err) {
