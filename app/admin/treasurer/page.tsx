@@ -187,12 +187,18 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
             <div key={m.id} className={CARD + ' overflow-hidden'}>
               <button onClick={() => setExpanded(open ? null : m.id)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-800/40 transition text-left">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-brand-blue text-white flex items-center justify-center text-xs font-bold">
-                    {m.name.split(' ').map((s) => s[0]).slice(0, 2).join('')}
+                  {/* Avatar — photo or styled initials */}
+                  <div className={`relative w-11 h-11 rounded-full shrink-0 overflow-hidden border-2 ${!hasActivity ? 'border-gray-700' : balance > 0 ? 'border-red-500/60' : balance < 0 ? 'border-brand-blue/60' : 'border-green-500/60'}`}>
+                    {m.photo
+                      ? <img src={m.photo} alt={m.name} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-white" style={{ background: 'linear-gradient(135deg,#D81F2E,#9b1020)' }}>
+                          {m.name.split(' ').map((s) => s[0]).slice(0, 2).join('')}
+                        </div>
+                    }
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-white">{m.name}</p>
-                    <p className="text-xs text-gray-500">{entries.length} entries</p>
+                    <p className="text-xs text-gray-500">{m.company || ''}{m.company && entries.length > 0 ? ' · ' : ''}{entries.length > 0 ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}` : 'No entries'}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
