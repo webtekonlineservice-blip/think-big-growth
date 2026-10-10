@@ -85,3 +85,28 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
   }
 }
+
+/**
+ * PUT /api/treasurer/transactions?id=<id>
+ * Admin-only: update any field on a transaction.
+ */
+export async function PUT(req: NextRequest) {
+  const session = getSession(req)
+  if (!session?.is_admin) return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
+  const id = req.nextUrl.searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required.' }, { status: 400 })
+  try {
+    const body = await req.json()
+    const set: Record<string, unknown> = {}
+    for (const k of ['type', 'category', 'description', 'amount', 'date', 'notes'] as const) {
+      if (body[k] !== undefined) set[k] = k === 'amount' ? Number(body[k]) : body[k]
+    }
+    await connectDB()
+    const tx = await Transaction.findByIdAndUpdate(id, { $set: set }, { new: true }).lean()
+    if (!tx) return NextResponse.json({ error: 'Transaction not found.' }, { status: 404 })
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('PUT /api/treasurer/transactions error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+  }
+}

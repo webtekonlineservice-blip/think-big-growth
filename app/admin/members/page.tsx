@@ -18,6 +18,30 @@ interface Member {
   logo?: string
 }
 
+/**
+ * Compress an image file to a max dimension × max dimension JPEG data URI.
+ * Keeps file size to ~15–40KB so it fits comfortably in the API body.
+ */
+function compressImage(file: File, maxPx = 256): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height))
+      const w = Math.round(img.width * scale)
+      const h = Math.round(img.height * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', 0.82))
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
 const EMPTY_FORM = {
   name: '',
   email: '',
@@ -426,7 +450,7 @@ export default function AdminMembersPage() {
                       {form.photo ? 'Replace' : 'Upload photo'}
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                         const file = e.target.files?.[0]; if (!file) return
-                        const r = new FileReader(); r.onload = () => setForm((f) => ({ ...f, photo: r.result as string })); r.readAsDataURL(file)
+                        compressImage(file, 256).then((uri) => setForm((f) => ({ ...f, photo: uri })))
                       }} />
                     </label>
                     {form.photo && <button type="button" onClick={() => setForm((f) => ({ ...f, photo: '' }))} className="text-xs text-gray-500 hover:text-red-400">Remove</button>}
@@ -441,7 +465,7 @@ export default function AdminMembersPage() {
                       {form.logo ? 'Replace' : 'Upload logo'}
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                         const file = e.target.files?.[0]; if (!file) return
-                        const r = new FileReader(); r.onload = () => setForm((f) => ({ ...f, logo: r.result as string })); r.readAsDataURL(file)
+                        compressImage(file, 256).then((uri) => setForm((f) => ({ ...f, logo: uri })))
                       }} />
                     </label>
                     {form.logo && <button type="button" onClick={() => setForm((f) => ({ ...f, logo: '' }))} className="text-xs text-gray-500 hover:text-red-400">Remove</button>}

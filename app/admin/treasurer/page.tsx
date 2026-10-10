@@ -5,7 +5,7 @@ import { useAdminAuth } from '@/hooks/useAdminAuth'
 import SocialGraphic, { GraphicData } from '@/components/SocialGraphic'
 import {
   Wallet, DollarSign, BarChart3, Plus, Trash2, Mail, Download,
-  ChevronDown, ChevronUp, X, Send, Loader2, Copy, Check, Mic, Presentation, Share2,
+  ChevronDown, ChevronUp, X, Send, Loader2, Copy, Check, Mic, Presentation, Share2, Pencil,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -134,6 +134,26 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
   const [mode, setMode] = useState<null | 'weekly' | 'payment'>(null)
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [editingEntry, setEditingEntry] = useState<LedgerEntry | null>(null)
+  const [entryForm, setEntryForm] = useState({ description: '', amount: '', date: '', notes: '', item: '', status: '' })
+  const [entrySaving, setEntrySaving] = useState(false)
+
+  const startEditEntry = (e: LedgerEntry) => {
+    setEditingEntry(e)
+    setEntryForm({ description: e.description, amount: String(e.amount), date: e.date, notes: e.notes || '', item: e.item || '', status: e.status })
+  }
+
+  const saveEntry = async () => {
+    if (!editingEntry) return
+    setEntrySaving(true)
+    await fetch(`/api/treasurer/ledger?id=${editingEntry.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...entryForm, amount: parseFloat(entryForm.amount) }),
+    })
+    setEntrySaving(false)
+    setEditingEntry(null)
+    await refresh()
+  }
 
   const totalCharged = ledger.filter((e) => e.type === 'charge').reduce((s, e) => s + e.amount, 0)
   const totalOwed = members.reduce((s, m) => { const b = memberBalance(ledger, m.name).balance; return b > 0 ? s + b : s }, 0)
@@ -211,15 +231,51 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
                 <div className="border-t border-gray-700 divide-y divide-gray-700/50">
                   {entries.length === 0 ? <p className="text-xs text-gray-500 px-4 py-3">No entries.</p> :
                     entries.sort((a, b) => (a.date > b.date ? -1 : 1)).map((e) => (
-                      <div key={e.id} className="flex items-center justify-between px-4 py-2.5 gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm text-gray-200">{e.description}{e.item ? ` — ${e.item}` : ''}</p>
-                          <p className="text-xs text-gray-500">{e.date}{e.notes ? ` · ${e.notes}` : ''}</p>
-                        </div>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${e.type === 'payment' ? 'bg-green-500/15 text-green-400' : e.type === 'opening' ? 'bg-brand-blue/15 text-brand-blue' : 'bg-red-500/15 text-red-400'}`}>
-                          {e.type === 'payment' ? '+' : '-'}{money(e.amount)}
-                        </span>
-                        <button onClick={() => del(e.id)} className="text-gray-600 hover:text-red-400 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <div key={e.id}>
+                        {editingEntry?.id === e.id ? (
+                          /* ── Inline entry edit ── */
+                          <div className="px-4 py-3 space-y-2 bg-gray-900/60">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div><label className="block text-xs text-gray-500 mb-1">Description</label>
+                                <input value={entryForm.description} onChange={(ev) => setEntryForm((f) => ({ ...f, description: ev.target.value }))} className={INPUT} />
+                              </div>
+                              <div><label className="block text-xs text-gray-500 mb-1">Amount ($)</label>
+                                <input type="number" step="0.01" value={entryForm.amount} onChange={(ev) => setEntryForm((f) => ({ ...f, amount: ev.target.value }))} className={INPUT} />
+                              </div>
+                              <div><label className="block text-xs text-gray-500 mb-1">Date</label>
+                                <input type="date" value={entryForm.date} onChange={(ev) => setEntryForm((f) => ({ ...f, date: ev.target.value }))} onClick={(ev) => ev.currentTarget.showPicker?.()} className={`${INPUT} cursor-pointer`} />
+                              </div>
+                              <div><label className="block text-xs text-gray-500 mb-1">Status</label>
+                                <select value={entryForm.status} onChange={(ev) => setEntryForm((f) => ({ ...f, status: ev.target.value }))} className={INPUT}>
+                                  {['unpaid', 'paid', 'waived'].map((s) => <option key={s}>{s}</option>)}
+                                </select>
+                              </div>
+                              <div><label className="block text-xs text-gray-500 mb-1">Dish (reference)</label>
+                                <input value={entryForm.item} onChange={(ev) => setEntryForm((f) => ({ ...f, item: ev.target.value }))} placeholder="e.g. Bison Burger" className={INPUT} />
+                              </div>
+                              <div><label className="block text-xs text-gray-500 mb-1">Notes</label>
+                                <input value={entryForm.notes} onChange={(ev) => setEntryForm((f) => ({ ...f, notes: ev.target.value }))} className={INPUT} />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={saveEntry} disabled={entrySaving} className={BTN_PRIMARY}>{entrySaving ? 'Saving…' : 'Save'}</button>
+                              <button onClick={() => setEditingEntry(null)} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white transition">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* ── Normal entry row ── */
+                          <div className="flex items-center justify-between px-4 py-2.5 gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-200">{e.description}{e.item ? ` — ${e.item}` : ''}</p>
+                              <p className="text-xs text-gray-500">{e.date}{e.notes ? ` · ${e.notes}` : ''}</p>
+                            </div>
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${e.type === 'payment' ? 'bg-green-500/15 text-green-400' : e.type === 'opening' ? 'bg-brand-blue/15 text-brand-blue' : 'bg-red-500/15 text-red-400'}`}>
+                              {e.type === 'payment' ? '+' : '-'}{money(e.amount)}
+                            </span>
+                            <button onClick={() => startEditEntry(e)} className="text-gray-600 hover:text-brand-blue transition"><Pencil className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => del(e.id)} className="text-gray-600 hover:text-red-400 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   <div className="flex justify-end gap-6 px-4 py-2 bg-gray-900/40 text-xs text-gray-400">
@@ -548,6 +604,26 @@ function PaymentForm({ members, ledger, onDone, onCancel }: { members: Member[];
 function TransactionsTab({ transactions, refresh }: { transactions: Transaction[]; refresh: () => Promise<void> }) {
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all')
+  const [editing, setEditing] = useState<Transaction | null>(null)
+  const [editForm, setEditForm] = useState({ type: 'income' as 'income' | 'expense', category: '', description: '', amount: '', date: '', notes: '' })
+  const [editSaving, setEditSaving] = useState(false)
+
+  const startEdit = (t: Transaction) => {
+    setEditing(t)
+    setEditForm({ type: t.type, category: t.category, description: t.description, amount: String(t.amount), date: t.date, notes: t.notes || '' })
+  }
+
+  const saveEdit = async () => {
+    if (!editing) return
+    setEditSaving(true)
+    await fetch(`/api/treasurer/transactions?id=${editing.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...editForm, amount: parseFloat(editForm.amount) }),
+    })
+    setEditSaving(false)
+    setEditing(null)
+    await refresh()
+  }
 
   const filtered = transactions.filter((t) => filter === 'all' || t.type === filter)
   const income = filtered.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)
@@ -582,13 +658,52 @@ function TransactionsTab({ transactions, refresh }: { transactions: Transaction[
       <div className="space-y-2">
         {filtered.length === 0 ? <p className="text-sm text-gray-500 text-center py-8">No transactions yet.</p> :
           filtered.map((t) => (
-            <div key={t.id} className={CARD + ' px-4 py-3 flex items-center gap-3'}>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-100 truncate">{t.description || t.category}</p>
-                <p className="text-xs text-gray-500">{t.category} · {t.date}{t.notes ? ` · ${t.notes}` : ''}</p>
-              </div>
-              <p className={`text-sm font-bold ${t.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>{t.type === 'income' ? '+' : '-'}{money(t.amount)}</p>
-              <button onClick={() => del(t.id)} className="text-gray-600 hover:text-red-400 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+            <div key={t.id} className={CARD + ' overflow-hidden'}>
+              {editing?.id === t.id ? (
+                /* ── Inline edit form ── */
+                <div className="px-4 py-3 space-y-3">
+                  <div className="flex rounded-lg overflow-hidden border border-gray-700 w-fit">
+                    {(['income', 'expense'] as const).map((ty) => (
+                      <button key={ty} onClick={() => setEditForm((f) => ({ ...f, type: ty, category: ty === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0] }))}
+                        className={`px-4 py-1.5 text-xs font-medium capitalize transition ${editForm.type === ty ? (ty === 'income' ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'bg-gray-900 text-gray-500'}`}>{ty}</button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><label className="block text-xs text-gray-500 mb-1">Category</label>
+                      <select value={editForm.category} onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))} className={INPUT}>
+                        {(editForm.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map((c) => <option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div><label className="block text-xs text-gray-500 mb-1">Date</label>
+                      <input type="date" value={editForm.date} onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))} onClick={(ev) => ev.currentTarget.showPicker?.()} className={`${INPUT} cursor-pointer`} />
+                    </div>
+                    <div><label className="block text-xs text-gray-500 mb-1">Amount ($)</label>
+                      <input type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))} className={INPUT} />
+                    </div>
+                    <div><label className="block text-xs text-gray-500 mb-1">Description</label>
+                      <input value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))} className={INPUT} />
+                    </div>
+                    <div className="col-span-2"><label className="block text-xs text-gray-500 mb-1">Notes</label>
+                      <input value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Optional notes…" className={INPUT} />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={saveEdit} disabled={editSaving} className={BTN_PRIMARY}>{editSaving ? 'Saving…' : 'Save'}</button>
+                    <button onClick={() => setEditing(null)} className="px-3 py-2 text-xs text-gray-400 hover:text-white transition">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                /* ── Normal row ── */
+                <div className="px-4 py-3 flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-100 truncate">{t.description || t.category}</p>
+                    <p className="text-xs text-gray-500">{t.category} · {t.date}{t.notes ? ` · ${t.notes}` : ''}</p>
+                  </div>
+                  <p className={`text-sm font-bold ${t.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>{t.type === 'income' ? '+' : '-'}{money(t.amount)}</p>
+                  <button onClick={() => startEdit(t)} className="text-gray-600 hover:text-brand-blue transition"><Pencil className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => del(t.id)} className="text-gray-600 hover:text-red-400 transition"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              )}
             </div>
           ))}
       </div>

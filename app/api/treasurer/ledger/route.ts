@@ -168,3 +168,35 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
   }
 }
+
+/**
+ * PUT /api/treasurer/ledger?id=<id>
+ * Admin-only: update any editable field on a ledger entry.
+ * Body: { type?, description?, item?, amount?, date?, status?, notes? }
+ */
+export async function PUT(req: NextRequest) {
+  const session = getSession(req)
+  if (!session?.is_admin) return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
+
+  const id = req.nextUrl.searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id required.' }, { status: 400 })
+
+  try {
+    const body = await req.json()
+    const set: Record<string, unknown> = {}
+    const allowed = ['type', 'description', 'item', 'amount', 'date', 'status', 'notes'] as const
+    for (const k of allowed) {
+      if (body[k] !== undefined) set[k] = k === 'amount' ? Number(body[k]) : body[k]
+    }
+    if (Object.keys(set).length === 0) {
+      return NextResponse.json({ error: 'No valid fields provided.' }, { status: 400 })
+    }
+    await connectDB()
+    const entry = await LedgerEntry.findByIdAndUpdate(id, { $set: set }, { new: true }).lean()
+    if (!entry) return NextResponse.json({ error: 'Entry not found.' }, { status: 404 })
+    return NextResponse.json({ ok: true })
+  } catch (err) {
+    console.error('PUT /api/treasurer/ledger error:', err)
+    return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })
+  }
+}
