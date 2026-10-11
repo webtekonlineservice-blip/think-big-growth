@@ -283,6 +283,27 @@ def main():
     log(f'  These will start the drip on the next daily cron.')
     log(f'{"="*60}\n')
 
+    # 5. Log the scraping run so the dashboard widget updates
+    try:
+        log_payload = {
+            'profession': profession,
+            'search_query': args.query,
+            'location': 'Kirkwood MO',
+            'found': len(businesses),
+            'imported': result.get('imported', 0),
+            'skipped': result.get('skipped', 0),
+            'enriched': len(prospects_with_email),
+            'source': 'leadgen_script',
+            'triggered_by': EMAIL or 'script',
+        }
+        lr = session.post(f'{API_URL}/api/scraping-logs', json=log_payload, timeout=15)
+        if lr.ok:
+            log(f'  ✓ Scraping run logged to dashboard.')
+        else:
+            log(f'  ⚠ Could not log scraping run: {lr.status_code}')
+    except Exception as e:
+        log(f'  ⚠ Scraping log failed: {e}')
+
 
 if __name__ == '__main__':
     main()

@@ -23,6 +23,17 @@ interface SeatView {
   member_company: string | null
 }
 
+interface ScrapingLogEntry {
+  id: string
+  profession: string
+  search_query: string
+  found: number
+  imported: number
+  skipped: number
+  source: string
+  ran_at: string
+}
+
 const STATUS_CONFIG = {
   filled:  { dot: 'bg-green-400',  badge: 'bg-green-500/20 text-green-400 border-green-500/30',  label: 'Filled'  },
   active:  { dot: 'bg-brand-indigo animate-pulse', badge: 'bg-brand-indigo/20 text-indigo-300 border-brand-indigo/30', label: 'Active'  },
@@ -33,6 +44,7 @@ const STATUS_CONFIG = {
 export default function AdminSeatsPage() {
   const { user, loading: authLoading } = useAdminAuth()
   const [seats, setSeats] = useState<SeatView[]>([])
+  const [scrapeLogs, setScrapeLogs] = useState<ScrapingLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [toggling, setToggling] = useState<string | null>(null)
   const [scraping, setScraping] = useState<string | null>(null)
@@ -41,10 +53,16 @@ export default function AdminSeatsPage() {
   const [search, setSearch] = useState('')
 
   const fetchSeats = useCallback(async () => {
-    const res = await fetch('/api/seats', { credentials: 'include' })
-    if (res.ok) {
-      const data = await res.json()
+    const [seatsRes, logsRes] = await Promise.all([
+      fetch('/api/seats', { credentials: 'include' }),
+      fetch('/api/scraping-logs?limit=20', { credentials: 'include' }),
+    ])
+    if (seatsRes.ok) {
+      const data = await seatsRes.json()
       setSeats(Array.isArray(data) ? data : (data.seats ?? []))
+    }
+    if (logsRes.ok) {
+      setScrapeLogs(await logsRes.json())
     }
   }, [])
 
@@ -195,6 +213,43 @@ export default function AdminSeatsPage() {
           </div>
         )}
 
+        {/* Scraping activity widget */}
+        {scrapeLogs.length > 0 && (
+          <div className="bg-gray-900/60 border border-gray-700/50 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-brand-indigo animate-pulse" />
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Recent Scraping Activity</h3>
+              </div>
+              <span className="text-xs text-gray-600">{scrapeLogs.length} run{scrapeLogs.length !== 1 ? 's' : ''} logged</span>
+            </div>
+            <div className="space-y-2">
+              {scrapeLogs.slice(0, 5).map((log) => {
+                const d = new Date(log.ran_at)
+                const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                return (
+                  <div key={log.id} className="flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-white font-medium truncate">{log.profession}</span>
+                      <span className="text-gray-600 truncate hidden sm:block">{log.search_query}</span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      {log.imported > 0 && (
+                        <span className="text-green-400 font-semibold">+{log.imported} new</span>
+                      )}
+                      {log.found > 0 && (
+                        <span className="text-gray-500">{log.found} found</span>
+                      )}
+                      <span className="text-gray-600">{dateStr} {timeStr}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Summary tiles */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {(['filled', 'active', 'paused', 'open'] as const).map((s) => (
@@ -300,12 +355,22 @@ export default function AdminSeatsPage() {
                   </div>
                 )}
 
-                {/* Search query + scrape button */}
+                {/* Search query + last scraped + scrape button */}
                 {seat.status !== 'filled' && (
                   <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-700/50">
-                    <p className="text-xs text-gray-500 truncate" title={seat.search_query}>
-                      🔍 {seat.search_query}
-                    </p>
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-500 truncate" title={seat.search_query}>
+                        🔍 {seat.search_query}
+                      </p>
+                      {seat.last_scraped ? (
+                        <p className="text-xs text-gray-600 mt-0.5">
+                          Last scraped: <span className="text-gray-400">{new Date(seat.last_scraped).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                          {' '}· <span className="text-gray-400">{seat.prospects_count} prospects</span>
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-700 mt-0.5">Never scraped</p>
+                      )}
+                    </div>
                     {seat.campaign_id && (
                       <button
                         onClick={() => triggerScrape(seat)}
