@@ -2,492 +2,526 @@
 
 import { useState, useEffect } from 'react'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
+import Link from 'next/link'
+import {
+  Users, UserCircle, DollarSign, Target, Mail, CheckSquare,
+  Calendar, AlertTriangle, ArrowRight, TrendingUp, Megaphone,
+  Radio, Wallet, BarChart3, RefreshCw,
+} from 'lucide-react'
 
-type SessionUser = import('@/hooks/useAdminAuth').AdminUser
-
-interface Campaign {
-  id: string
-  name: string
-  total_prospects: number
-  total_sent: number
-  total_opened: number
-  total_clicked: number
-  total_unsubscribed: number
-  active: boolean
-}
-
-// ─── Outbound Drip toggle tile ────────────────────────────────────────────────
-function AutomationToggle({
-  campaigns,
-  onToggle,
-}: {
-  campaigns: Campaign[]
-  onToggle: (id: string, active: boolean) => Promise<void>
-}) {
-  const [toggling, setToggling] = useState<string | null>(null)
-  const active = campaigns.filter((c) => c.active)
-
-  const handleToggle = async (id: string, current: boolean) => {
-    setToggling(id)
-    await onToggle(id, !current)
-    setToggling(null)
-  }
-
-  return (
-    <div className="p-4 bg-gray-900/50 rounded-lg border border-gray-700/50">
-      <div className="flex items-center gap-2 mb-3">
-        <span className={`w-2.5 h-2.5 rounded-full ${active.length > 0 ? 'bg-green-400 animate-pulse' : 'bg-gray-600'}`} />
-        <p className="text-sm font-medium text-white">Outbound Drip</p>
-        <span className="ml-auto text-xs text-gray-500">{active.length} active</span>
-      </div>
-      {campaigns.length === 0 ? (
-        <p className="text-xs text-gray-500">No campaigns yet.</p>
-      ) : (
-        <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
-          {campaigns.map((c) => (
-            <div key={c.id} className="flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-300 truncate flex-1" title={c.name}>{c.name}</span>
-              <button
-                onClick={() => handleToggle(c.id, c.active)}
-                disabled={toggling === c.id}
-                title={c.active ? 'Pause' : 'Resume'}
-                className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-                  c.active ? 'bg-green-500' : 'bg-gray-600'
-                }`}
-              >
-                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-                  c.active ? 'translate-x-[18px]' : 'translate-x-[2px]'
-                }`} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      <a href="/admin/outbound" className="text-xs text-brand-blue hover:text-white transition-colors mt-3 block">
-        Manage campaigns →
-      </a>
-    </div>
-  )
-}
-
-interface SeatSummary {
-  filled: number
-  active: number
-  open: number
-}
-
-interface DashboardData {
-  members: number
-  visitors: number
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface DashData {
+  // Chapter
+  memberCount: number
+  // Visitors
+  totalVisitors: number
   visitorsThisMonth: number
   conversionRate: number
-  prospects: number
-  campaigns: Campaign[]
-  seats: SeatSummary
-  breakdown: {
-    total: number
-    withEmail: number
-    emailCoverage: number
-    byProfession: { name: string; count: number }[]
-    bySource: { name: string; count: number }[]
-  } | null
-  recentVisitors: Array<{
-    id: string
-    first_name: string
-    last_name: string
-    company: string
-    status: string
-    created_at: string
-  }>
+  pendingVisitors: number          // invited/visited but not applied
+  // Treasurer
+  totalOwed: number
+  membersOwing: number
+  startingBalance: number
+  recentLedger: { name: string; balance: number; photo?: string }[]
+  // Outbound
+  totalProspects: number
+  totalSent: number
+  openRate: number
+  activeCampaigns: number
+  // Seats
+  seatsFilled: number
+  seatsActive: number
+  seatsOpen: number
+  // Speaker
+  nextMeeting: { date: string; speaker: string; speakerCompany?: string; speakerPhoto?: string } | null
+  // Marketing sends (last 7 days)
+  recentSends: number
+  // Social posts
+  scheduledPosts: number
 }
 
+const money = (n: number) => `$${Math.abs(n).toFixed(2)}`
+const TODAY = new Date().toISOString().split('T')[0]
+
+// ─── Dashboard page ───────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const { user, loading: authLoading } = useAdminAuth()
-  const [data, setData] = useState<DashboardData | null>(null)
+  const [data, setData] = useState<DashData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+
+  const load = async () => {
+    try {
+      const [
+        membersRes, visitorsRes, speakersRes, ledgerRes, txRes,
+        seatsRes, prospectsRes, campaignsRes, socialRes, mktLogsRes,
+        settingsRes,
+      ] = await Promise.all([
+        fetch('/api/members', { credentials: 'include' }),
+        fetch('/api/visitors', { credentials: 'include' }),
+        fetch('/api/treasurer/speakers', { credentials: 'include' }),
+        fetch('/api/treasurer/ledger', { credentials: 'include' }),
+        fetch('/api/treasurer/transactions', { credentials: 'include' }),
+        fetch('/api/seats', { credentials: 'include' }),
+        fetch('/api/prospects?limit=1', { credentials: 'include' }),
+        fetch('/api/prospects/campaigns', { credentials: 'include' }),
+        fetch('/api/treasurer/social', { credentials: 'include' }),
+        fetch('/api/marketing/logs?limit=100', { credentials: 'include' }),
+        fetch('/api/treasurer/settings', { credentials: 'include' }),
+      ])
+
+      const members = membersRes.ok ? await membersRes.json() : []
+      const visitors = visitorsRes.ok ? await visitorsRes.json() : []
+      const speakers: { date: string; name: string; member_id: string | null }[] = speakersRes.ok ? await speakersRes.json() : []
+      const ledger: { member_name: string; type: string; amount: number }[] = ledgerRes.ok ? await ledgerRes.json() : []
+      const txs: { type: string; amount: number; sent_at?: string; date: string }[] = txRes.ok ? await txRes.json() : []
+      const seatsJson = seatsRes.ok ? await seatsRes.json() : {}
+      const seatsArr: { status: string }[] = Array.isArray(seatsJson) ? seatsJson : (seatsJson.seats ?? [])
+      const prospectsData = prospectsRes.ok ? await prospectsRes.json() : { total: 0 }
+      const campaigns: { active: boolean; total_sent: number; total_opened: number }[] = campaignsRes.ok ? await campaignsRes.json() : []
+      const social: { status: string; date: string }[] = socialRes.ok ? await socialRes.json() : []
+      const mktLogs: { sent_at: string }[] = mktLogsRes.ok ? await mktLogsRes.json() : []
+      const settings = settingsRes.ok ? await settingsRes.json() : {}
+
+      // ── Treasurer balances ──
+      const balanceByMember = new Map<string, number>()
+      for (const e of ledger) {
+        const cur = balanceByMember.get(e.member_name) ?? 0
+        if (e.type === 'charge' || e.type === 'opening') balanceByMember.set(e.member_name, cur + e.amount)
+        else if (e.type === 'payment') balanceByMember.set(e.member_name, cur - e.amount)
+      }
+      const totalOwed = Array.from(balanceByMember.values()).filter(b => b > 0).reduce((s, b) => s + b, 0)
+      const membersOwing = Array.from(balanceByMember.values()).filter(b => b > 0).length
+
+      const recentLedger = members
+        .map((m: { id: string; name: string; photo?: string }) => ({ name: m.name, balance: balanceByMember.get(m.name) ?? 0, photo: m.photo }))
+        .filter((m: { balance: number }) => m.balance > 0)
+        .sort((a: { balance: number }, b: { balance: number }) => b.balance - a.balance)
+        .slice(0, 5)
+
+      // ── Outbound ──
+      const totalSent = campaigns.reduce((s, c) => s + c.total_sent, 0)
+      const totalOpened = campaigns.reduce((s, c) => s + c.total_opened, 0)
+      const openRate = totalSent > 0 ? Math.round((totalOpened / totalSent) * 100) : 0
+      const activeCampaigns = campaigns.filter(c => c.active).length
+
+      // ── Seats ──
+      const seatsFilled = seatsArr.filter(s => s.status === 'filled').length
+      const seatsActive = seatsArr.filter(s => s.status === 'active').length
+      const seatsOpen = seatsArr.filter(s => s.status === 'open').length
+
+      // ── Visitors ──
+      const now = new Date()
+      const visitorsThisMonth = visitors.filter((v: { created_at: string }) => {
+        const d = new Date(v.created_at)
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+      }).length
+      const converted = visitors.filter((v: { status: string }) => v.status === 'member').length
+      const conversionRate = visitors.length > 0 ? Math.round((converted / visitors.length) * 100) : 0
+      const pendingVisitors = visitors.filter((v: { status: string }) => v.status === 'invited' || v.status === 'visited').length
+
+      // ── Next meeting / speaker ──
+      const upcomingSpeakers = speakers.filter(s => s.date >= TODAY).sort((a, b) => a.date < b.date ? -1 : 1)
+      const nextSpeaker = upcomingSpeakers[0]
+      const speakerMember = nextSpeaker ? members.find((m: { id: string; company?: string; photo?: string }) => m.id === nextSpeaker.member_id) : null
+      const nextMeeting = nextSpeaker && nextSpeaker.name !== 'Speaker Name'
+        ? { date: nextSpeaker.date, speaker: nextSpeaker.name, speakerCompany: speakerMember?.company, speakerPhoto: speakerMember?.photo }
+        : null
+
+      // ── Marketing sends last 7 days ──
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000).toISOString()
+      const recentSends = mktLogs.filter(l => l.sent_at > sevenDaysAgo).length
+
+      // ── Scheduled social posts ──
+      const scheduledPosts = social.filter(p => p.status === 'scheduled' && p.date >= TODAY).length
+
+      setData({
+        memberCount: members.length,
+        totalVisitors: visitors.length,
+        visitorsThisMonth,
+        conversionRate,
+        pendingVisitors,
+        totalOwed,
+        membersOwing,
+        startingBalance: settings.startingBalance ?? 3201.49,
+        recentLedger,
+        totalProspects: prospectsData.total ?? 0,
+        totalSent,
+        openRate,
+        activeCampaigns,
+        seatsFilled,
+        seatsActive,
+        seatsOpen,
+        nextMeeting,
+        recentSends,
+        scheduledPosts,
+      })
+      setLastRefresh(new Date())
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
     if (!user) return
-
-    const load = async () => {
-      try {
-        const [membersRes, visitorsRes, campaignsRes, prospectsRes, breakdownRes, seatsRes] = await Promise.all([
-          fetch('/api/members', { credentials: 'include' }),
-          fetch('/api/visitors', { credentials: 'include' }),
-          fetch('/api/prospects/campaigns', { credentials: 'include' }),
-          fetch('/api/prospects?limit=1', { credentials: 'include' }),
-          fetch('/api/prospects/breakdown', { credentials: 'include' }),
-          fetch('/api/seats', { credentials: 'include' }),
-        ])
-
-        const members = membersRes.ok ? await membersRes.json() : []
-        const visitors = visitorsRes.ok ? await visitorsRes.json() : []
-        const campaigns = campaignsRes.ok ? await campaignsRes.json() : []
-        const prospectsData = prospectsRes.ok ? await prospectsRes.json() : { total: 0 }
-        const breakdown = breakdownRes.ok ? await breakdownRes.json() : null
-        const seatsJson = seatsRes.ok ? await seatsRes.json() : {}
-        const seatsData: Array<{ status: string }> = Array.isArray(seatsJson) ? seatsJson : (seatsJson.seats ?? [])
-        const seats: SeatSummary = {
-          filled: seatsData.filter((s) => s.status === 'filled').length,
-          active: seatsData.filter((s) => s.status === 'active').length,
-          open:   seatsData.filter((s) => s.status === 'open').length,
-        }
-
-        const now = new Date()
-        const thisMonth = visitors.filter((v: { created_at: string }) => {
-          const d = new Date(v.created_at)
-          return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-        })
-        const converted = visitors.filter((v: { status: string }) => v.status === 'member').length
-
-        setData({
-          members: members.length,
-          visitors: visitors.length,
-          visitorsThisMonth: thisMonth.length,
-          conversionRate: visitors.length > 0 ? Math.round((converted / visitors.length) * 100) : 0,
-          prospects: prospectsData.total ?? 0,
-          campaigns,
-          seats,
-          breakdown,
-          recentVisitors: visitors.slice(0, 5).map((v: { id: string; first_name: string; last_name: string; company: string; status: string; created_at: string }) => ({
-            id: v.id,
-            first_name: v.first_name,
-            last_name: v.last_name,
-            company: v.company,
-            status: v.status,
-            created_at: v.created_at,
-          })),
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-
     load()
-  }, [user])
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refresh = async () => {
+    setRefreshing(true)
+    await load()
+  }
 
   if (authLoading || loading || !data) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <svg className="w-8 h-8 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-        </svg>
+        <div className="w-8 h-8 border-2 border-brand-blue border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
 
-  const totalSent = data.campaigns.reduce((sum, c) => sum + c.total_sent, 0)
-  const totalOpened = data.campaigns.reduce((sum, c) => sum + c.total_opened, 0)
-  const totalClicked = data.campaigns.reduce((sum, c) => sum + c.total_clicked, 0)
-  const openRate = totalSent > 0 ? Math.round((totalOpened / totalSent) * 100) : 0
-  const clickRate = totalSent > 0 ? Math.round((totalClicked / totalSent) * 100) : 0
+  return (
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-5">
 
-  const STATUS_STYLES: Record<string, string> = {
-    invited: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-    visited: 'bg-brand-blue/10 text-brand-blue border-brand-blue/20',
-    applied: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-    member: 'bg-green-500/10 text-green-400 border-green-500/20',
-  }
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-white">Command Center</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Updated {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </p>
+        </div>
+        <button onClick={refresh} disabled={refreshing}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white border border-gray-700 px-3 py-2 rounded-lg transition">
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+      </div>
+
+      {/* ── THIS THURSDAY ─────────────────────────────────────────────────── */}
+      <NextMeetingCard nextMeeting={data.nextMeeting} />
+
+      {/* ── KEY STATS  2×2 grid ───────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3">
+        <StatTile
+          label="Members" value={data.memberCount.toString()}
+          sub="Active chapter" color="text-white"
+          Icon={UserCircle} href="/admin/members"
+        />
+        <StatTile
+          label="Visitors" value={data.totalVisitors.toString()}
+          sub={`${data.visitorsThisMonth} this month`} color="text-brand-blue"
+          Icon={Users} href="/admin/visitors"
+          badge={data.pendingVisitors > 0 ? `${data.pendingVisitors} pending` : undefined}
+          badgeColor="yellow"
+        />
+        <StatTile
+          label="Outstanding" value={money(data.totalOwed)}
+          sub={`${data.membersOwing} member${data.membersOwing !== 1 ? 's' : ''} owe`}
+          color="text-red-400" Icon={Wallet} href="/admin/treasurer"
+          badge={data.totalOwed > 0 ? 'Needs attention' : undefined}
+          badgeColor="red"
+        />
+        <StatTile
+          label="Seats Filled" value={`${data.seatsFilled}/34`}
+          sub={`${data.seatsActive} active · ${data.seatsOpen} open`}
+          color="text-brand-red" Icon={CheckSquare} href="/admin/seats"
+        />
+      </div>
+
+      {/* ── NEEDS ATTENTION ───────────────────────────────────────────────── */}
+      {(data.recentLedger.length > 0 || data.pendingVisitors > 0) && (
+        <NeedsAttention ledger={data.recentLedger} pendingVisitors={data.pendingVisitors} />
+      )}
+
+      {/* ── QUICK ACTIONS ─────────────────────────────────────────────────── */}
+      <QuickActions />
+
+      {/* ── OUTBOUND & MARKETING ──────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <StatusStrip
+          title="Outbound Campaigns"
+          Icon={Target}
+          href="/admin/outbound"
+          items={[
+            { label: 'Prospects', value: data.totalProspects.toLocaleString(), color: 'text-brand-orange' },
+            { label: 'Emails Sent', value: data.totalSent.toLocaleString(), color: 'text-purple-400' },
+            { label: 'Open Rate', value: `${data.openRate}%`, color: 'text-green-400' },
+            { label: 'Active', value: data.activeCampaigns.toString(), color: 'text-brand-blue' },
+          ]}
+        />
+        <StatusStrip
+          title="Marketing"
+          Icon={Radio}
+          href="/admin/marketing"
+          items={[
+            { label: 'Sends (7d)', value: data.recentSends.toString(), color: 'text-green-400' },
+            { label: 'Scheduled Posts', value: data.scheduledPosts.toString(), color: 'text-brand-blue' },
+            { label: 'Conversion', value: `${data.conversionRate}%`, color: 'text-purple-400' },
+          ]}
+        />
+      </div>
+
+      {/* ── SECONDARY STATS ───────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <MiniStat label="Campaigns" value={data.activeCampaigns} sub="active" color="text-purple-400" />
+        <MiniStat label="Visitors (mo)" value={data.visitorsThisMonth} sub="this month" color="text-brand-blue" />
+        <MiniStat label="Open Rate" value={`${data.openRate}%`} sub="outbound email" color="text-green-400" />
+        <MiniStat label="Open Seats" value={data.seatsOpen} sub="recruiting" color="text-brand-red" />
+      </div>
+
+      {/* ── CHAPTER HEALTH BAR ────────────────────────────────────────────── */}
+      <ChapterHealth data={data} />
+
+    </div>
+  )
+}
+
+// ─── Next Meeting Card ────────────────────────────────────────────────────────
+function NextMeetingCard({ nextMeeting }: { nextMeeting: DashData['nextMeeting'] }) {
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+  const dateStr = nextMeeting?.date
+    ? (() => { const [y,m,d] = nextMeeting.date.split('-').map(Number); return `${MONTHS[m-1]} ${d}, ${y}` })()
+    : 'Next Thursday'
 
   return (
-    <div className="min-h-screen">
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-
-        {/* Top stats row */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <div className="stat-card">
-            <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Members</p>
-            <p className="text-3xl font-bold text-white">{data.members}</p>
-            <p className="text-xs text-gray-500">Active chapter</p>
+    <div className="bg-gradient-to-br from-brand-red/20 to-brand-red/5 border border-brand-red/30 rounded-xl p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-brand-red animate-pulse" />
+            <span className="text-xs font-semibold text-brand-red uppercase tracking-widest">This Thursday</span>
           </div>
-          <div className="stat-card">
-            <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Visitors</p>
-            <p className="text-3xl font-bold text-brand-blue">{data.visitors}</p>
-            <p className="text-xs text-gray-500">{data.visitorsThisMonth} this month</p>
-          </div>
-          <div className="stat-card">
-            <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Conversion</p>
-            <p className="text-3xl font-bold text-green-400">{data.conversionRate}%</p>
-            <p className="text-xs text-gray-500">Visitor → Member</p>
-          </div>
-          <div className="stat-card">
-            <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Leads</p>
-            <p className="text-3xl font-bold text-brand-orange">{data.prospects}</p>
-            <p className="text-xs text-gray-500">Prospects scraped</p>
-          </div>
-          <div className="stat-card">
-            <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Emails Sent</p>
-            <p className="text-3xl font-bold text-purple-400">{totalSent}</p>
-            <p className="text-xs text-gray-500">{openRate}% open · {clickRate}% click</p>
-          </div>
-          <a href="/admin/seats" className="stat-card hover:border-brand-red/40 transition-colors cursor-pointer">
-            <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold">Seats</p>
-            <p className="text-3xl font-bold text-brand-red">{data.seats.filled}<span className="text-base text-gray-600">/34</span></p>
-            <p className="text-xs text-gray-500">{data.seats.active} active outreach · {data.seats.open} open</p>
-          </a>
-        </div>
-
-        {/* Data Being Collected */}
-        {data.breakdown && data.breakdown.total > 0 && (
-          <div className="card">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <h2 className="text-base font-semibold text-white flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                  Data Being Collected
-                </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {data.breakdown.total} businesses captured · {data.breakdown.withEmail} with emails ({data.breakdown.emailCoverage}% coverage)
-                </p>
-              </div>
-              <a href="/admin/prospects" className="text-xs text-brand-blue hover:text-white transition-colors">Manage →</a>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* By profession */}
-              <div>
-                <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold mb-3">By Profession</p>
-                <div className="space-y-2">
-                  {data.breakdown.byProfession.slice(0, 8).map((p) => {
-                    const pct = Math.round((p.count / data.breakdown!.total) * 100)
-                    return (
-                      <div key={p.name}>
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-gray-300 truncate">{p.name}</span>
-                          <span className="text-gray-500 font-medium ml-2">{p.count}</span>
-                        </div>
-                        <div className="w-full bg-gray-800 rounded-full h-1.5">
-                          <div className="bg-brand-red h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* By source + email coverage */}
-              <div>
-                <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold mb-3">By Source</p>
-                <div className="space-y-2 mb-6">
-                  {data.breakdown.bySource.map((s) => (
-                    <div key={s.name} className="flex items-center justify-between p-2 bg-gray-900/50 rounded-lg border border-gray-700/50">
-                      <span className="text-xs text-gray-300 capitalize">{s.name.replace(/_/g, ' ')}</span>
-                      <span className="text-xs text-white font-semibold">{s.count}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Email coverage donut-ish bar */}
-                <p className="text-xs text-gray-400 uppercase tracking-widest font-semibold mb-2">Email Coverage</p>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 bg-gray-800 rounded-full h-3">
-                    <div className="bg-green-400 h-3 rounded-full transition-all" style={{ width: `${data.breakdown.emailCoverage}%` }} />
+          <p className="text-base font-bold text-white">{dateStr}</p>
+          <p className="text-xs text-gray-400 mt-0.5">11:30 AM · Mike Duffy's Pub & Grill, Kirkwood</p>
+          {nextMeeting && (
+            <div className="flex items-center gap-2 mt-3">
+              {nextMeeting.speakerPhoto
+                ? <img src={nextMeeting.speakerPhoto} alt="" className="w-8 h-8 rounded-full object-cover border border-gray-700 shrink-0" />
+                : <div className="w-8 h-8 rounded-full bg-brand-red/30 flex items-center justify-center text-xs font-bold text-brand-red shrink-0">
+                    {nextMeeting.speaker.split(' ').map(s => s[0]).slice(0,2).join('')}
                   </div>
-                  <span className="text-sm font-bold text-green-400">{data.breakdown.emailCoverage}%</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">{data.breakdown.withEmail} of {data.breakdown.total} have contact emails</p>
+              }
+              <div>
+                <p className="text-sm font-semibold text-white">🎤 {nextMeeting.speaker}</p>
+                {nextMeeting.speakerCompany && <p className="text-xs text-gray-500">{nextMeeting.speakerCompany}</p>}
               </div>
             </div>
-          </div>
-        )}
+          )}
+          {!nextMeeting && (
+            <Link href="/admin/treasurer" className="inline-flex items-center gap-1 text-xs text-brand-red mt-2 hover:underline">
+              <Calendar className="w-3.5 h-3.5" /> Assign speaker →
+            </Link>
+          )}
+        </div>
+        <Link href="/admin/treasurer" className="shrink-0 text-xs text-gray-500 hover:text-white transition flex items-center gap-1">
+          <Calendar className="w-4 h-4" />
+        </Link>
+      </div>
+    </div>
+  )
+}
 
-        {/* Two-column layout */}
-        <div className="grid md:grid-cols-2 gap-6">
+// ─── Stat Tile ────────────────────────────────────────────────────────────────
+function StatTile({ label, value, sub, color, Icon, href, badge, badgeColor }: {
+  label: string; value: string; sub: string; color: string
+  Icon: React.ElementType; href: string; badge?: string; badgeColor?: 'red' | 'yellow' | 'green'
+}) {
+  const badgeStyles = { red: 'bg-red-500/15 text-red-400', yellow: 'bg-yellow-500/15 text-yellow-400', green: 'bg-green-500/15 text-green-400' }
+  return (
+    <Link href={href} className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 hover:border-gray-600 transition active:scale-[0.98] block">
+      <div className="flex items-start justify-between mb-2">
+        <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">{label}</p>
+        <Icon className="w-4 h-4 text-gray-600" />
+      </div>
+      <p className={`text-3xl font-black ${color} leading-none`}>{value}</p>
+      <p className="text-xs text-gray-500 mt-1">{sub}</p>
+      {badge && (
+        <span className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium ${badgeStyles[badgeColor || 'yellow']}`}>
+          {badge}
+        </span>
+      )}
+    </Link>
+  )
+}
 
-          {/* Outbound campaigns status */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-white">Outbound Campaigns</h2>
-              <a href="/admin/outbound" className="text-xs text-brand-blue hover:text-white transition-colors">View all →</a>
-            </div>
-
-            {data.campaigns.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500 text-sm mb-3">No campaigns yet.</p>
-                <a href="/admin/outbound" className="btn-primary text-xs px-4 py-2">Create Campaign</a>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {data.campaigns.slice(0, 4).map((c) => {
-                  const cOpenRate = c.total_sent > 0 ? Math.round((c.total_opened / c.total_sent) * 100) : 0
-                  return (
-                    <div key={c.id} className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-gray-700/50">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${c.active ? 'bg-green-400' : 'bg-gray-600'}`} />
-                          <p className="text-sm font-medium text-white truncate">{c.name}</p>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {c.total_prospects} prospects · {c.total_sent} sent · {cOpenRate}% open
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs">
-                        <span className="text-brand-blue font-semibold">{c.total_opened}</span>
-                        <span className="text-green-400 font-semibold">{c.total_clicked}</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Recent visitors */}
-          <div className="card">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-semibold text-white">Recent Visitors</h2>
-              <a href="/admin/visitors" className="text-xs text-brand-blue hover:text-white transition-colors">View all →</a>
-            </div>
-
-            {data.recentVisitors.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500 text-sm">No visitors yet. Share your invite link to start.</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {data.recentVisitors.map((v) => (
-                  <div key={v.id} className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-gray-700/50">
-                    <div>
-                      <p className="text-sm font-medium text-white">{v.first_name} {v.last_name}</p>
-                      <p className="text-xs text-gray-500">{v.company}</p>
-                    </div>
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full border font-medium ${STATUS_STYLES[v.status] || 'text-gray-400'}`}>
-                      {v.status.charAt(0).toUpperCase() + v.status.slice(1)}
-                    </span>
+// ─── Needs Attention ──────────────────────────────────────────────────────────
+function NeedsAttention({ ledger, pendingVisitors }: {
+  ledger: { name: string; balance: number; photo?: string }[]
+  pendingVisitors: number
+}) {
+  return (
+    <div className="bg-gray-800/60 border border-yellow-500/20 rounded-xl overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-700 bg-yellow-500/5">
+        <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+        <h3 className="text-sm font-semibold text-white">Needs Attention</h3>
+      </div>
+      <div className="divide-y divide-gray-700/50">
+        {/* Members owing */}
+        {ledger.map((m) => (
+          <Link key={m.name} href="/admin/treasurer"
+            className="flex items-center justify-between px-4 py-3 hover:bg-gray-700/30 transition">
+            <div className="flex items-center gap-3">
+              {m.photo
+                ? <img src={m.photo} alt="" className="w-8 h-8 rounded-full object-cover border border-gray-700 shrink-0" />
+                : <div className="w-8 h-8 rounded-full bg-brand-red/20 flex items-center justify-center text-xs font-bold text-brand-red shrink-0">
+                    {m.name.split(' ').map(s => s[0]).slice(0,2).join('')}
                   </div>
-                ))}
+              }
+              <div>
+                <p className="text-sm text-gray-200 font-medium">{m.name}</p>
+                <p className="text-xs text-gray-500">Unpaid balance</p>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Automation status */}
-        <div className="card">
-          <h2 className="text-base font-semibold text-white mb-5">Automation Status</h2>
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="p-4 bg-gray-900/50 rounded-lg border border-gray-700/50">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
-                <p className="text-sm font-medium text-white">Visitor Follow-Up</p>
-              </div>
-              <p className="text-xs text-gray-400">
-                Day 1 SMS · Day 7 SMS · Day 14 Email<br/>
-                Runs daily at 9 AM UTC
-              </p>
-            </div>
-            <AutomationToggle
-              campaigns={data.campaigns}
-              onToggle={async (id, active) => {
-                await fetch(`/api/prospects/campaigns/${id}`, {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ active }),
-                })
-                // Re-fetch dashboard data
-                const cr = await fetch('/api/prospects/campaigns')
-                if (cr.ok) {
-                  const updated = await cr.json()
-                  setData((d) => d ? { ...d, campaigns: updated } : d)
-                }
-              }}
-            />
-            <div className="p-4 bg-gray-900/50 rounded-lg border border-gray-700/50">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
-                <p className="text-sm font-medium text-white">Email Delivery</p>
-              </div>
-              <p className="text-xs text-gray-400">
-                via Resend · noreply@thinkbig.webtek.ai<br/>
-                Verify domain to activate
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick actions */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <a href="/admin/seats" className="card flex items-center gap-3 hover:border-green-500/40 transition-colors cursor-pointer py-4">
-            <div className="w-9 h-9 bg-green-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-white font-medium text-sm">Manage Seats</p>
-              <p className="text-gray-500 text-xs">Toggle outreach per seat</p>
-            </div>
-          </a>
-          <a href="/admin/outbound" className="card flex items-center gap-3 hover:border-brand-blue/40 transition-colors cursor-pointer py-4">
-            <div className="w-9 h-9 bg-brand-blue/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-brand-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-white font-medium text-sm">Import Leads</p>
-              <p className="text-gray-500 text-xs">CSV or extension</p>
-            </div>
-          </a>
-          <a href="/admin/campaigns" className="card flex items-center gap-3 hover:border-purple-500/40 transition-colors cursor-pointer py-4">
-            <div className="w-9 h-9 bg-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-white font-medium text-sm">Send Campaign</p>
-              <p className="text-gray-500 text-xs">SMS or email blast</p>
-            </div>
-          </a>
-          <a href="/admin/visitors" className="card flex items-center gap-3 hover:border-brand-orange/40 transition-colors cursor-pointer py-4">
-            <div className="w-9 h-9 bg-brand-orange/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-brand-orange" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-white font-medium text-sm">Visitor Pipeline</p>
-              <p className="text-gray-500 text-xs">Manage prospects</p>
-            </div>
-          </a>
-          <a href="/admin/analytics" className="card flex items-center gap-3 hover:border-green-500/40 transition-colors cursor-pointer py-4">
-            <div className="w-9 h-9 bg-green-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-white font-medium text-sm">Analytics</p>
-              <p className="text-gray-500 text-xs">Growth metrics</p>
-            </div>
-          </a>
-        </div>
-
-        {/* Your invite link */}
-        <div className="card border-brand-blue/30 bg-gradient-to-br from-brand-blue/5 to-transparent">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-white mb-1">Your Invite Link</h2>
-              <p className="text-sm text-gray-400">Share this to get credit for every visitor registration.</p>
             </div>
             <div className="flex items-center gap-2">
-              <code className="text-xs bg-gray-900 text-brand-blue px-3 py-2 rounded-lg border border-gray-700">
-                thinkbig.webtek.ai/invite/{user?.invite_code}
-              </code>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(`https://thinkbig.webtek.ai/invite/${user?.invite_code}`)
-                }}
-                className="btn-primary text-xs px-3 py-2"
-              >
-                Copy
-              </button>
+              <span className="text-sm font-bold text-red-400">{money(m.balance)}</span>
+              <ArrowRight className="w-3.5 h-3.5 text-gray-600" />
+            </div>
+          </Link>
+        ))}
+        {/* Pending visitors */}
+        {pendingVisitors > 0 && (
+          <Link href="/admin/visitors"
+            className="flex items-center justify-between px-4 py-3 hover:bg-gray-700/30 transition">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center shrink-0">
+                <Users className="w-4 h-4 text-yellow-400" />
+              </div>
+              <div>
+                <p className="text-sm text-gray-200 font-medium">{pendingVisitors} visitors pending</p>
+                <p className="text-xs text-gray-500">Invited or visited — not yet applied</p>
+              </div>
+            </div>
+            <ArrowRight className="w-3.5 h-3.5 text-gray-600" />
+          </Link>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Quick Actions ────────────────────────────────────────────────────────────
+function QuickActions() {
+  const actions = [
+    { label: 'Weekly Bill', href: '/admin/treasurer', icon: DollarSign, color: 'bg-brand-blue text-white' },
+    { label: 'Send Reminder', href: '/admin/marketing', icon: Radio, color: 'bg-green-600 text-white' },
+    { label: 'Invoice Member', href: '/admin/marketing', icon: Wallet, color: 'bg-brand-red text-white' },
+    { label: 'New Visitor', href: '/admin/visitors', icon: Users, color: 'bg-purple-600 text-white' },
+    { label: 'Social Post', href: '/admin/treasurer', icon: Megaphone, color: 'bg-pink-600 text-white' },
+    { label: 'View Report', href: '/admin/treasurer', icon: BarChart3, color: 'bg-gray-700 text-white' },
+  ]
+  return (
+    <div className="bg-gray-800/60 border border-gray-700 rounded-xl overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-700">
+        <h3 className="text-sm font-semibold text-white">Quick Actions</h3>
+      </div>
+      <div className="grid grid-cols-3 gap-px bg-gray-700">
+        {actions.map(({ label, href, icon: Icon, color }) => (
+          <Link key={label} href={href}
+            className="flex flex-col items-center gap-2 py-4 px-2 bg-gray-800/60 hover:bg-gray-700/60 transition active:scale-[0.97]">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
+              <Icon className="w-5 h-5" />
+            </div>
+            <span className="text-xs text-gray-400 text-center leading-tight">{label}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Status Strip ─────────────────────────────────────────────────────────────
+function StatusStrip({ title, Icon, href, items }: {
+  title: string
+  Icon: React.ElementType
+  href: string
+  items: { label: string; value: string; color: string }[]
+}) {
+  return (
+    <Link href={href} className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 hover:border-gray-600 transition block">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Icon className="w-4 h-4 text-gray-500" />
+          <h3 className="text-sm font-semibold text-white">{title}</h3>
+        </div>
+        <ArrowRight className="w-4 h-4 text-gray-600" />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {items.map(({ label, value, color }) => (
+          <div key={label} className="bg-gray-900/60 rounded-lg px-3 py-2">
+            <p className="text-xs text-gray-500">{label}</p>
+            <p className={`text-lg font-bold ${color} leading-tight`}>{value}</p>
+          </div>
+        ))}
+      </div>
+    </Link>
+  )
+}
+
+// ─── Mini Stat ────────────────────────────────────────────────────────────────
+function MiniStat({ label, value, sub, color }: { label: string; value: string | number; sub: string; color: string }) {
+  return (
+    <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-3 text-center">
+      <p className="text-xs text-gray-500 mb-1">{label}</p>
+      <p className={`text-2xl font-black ${color}`}>{value}</p>
+      <p className="text-xs text-gray-600 mt-0.5">{sub}</p>
+    </div>
+  )
+}
+
+// ─── Chapter Health Bar ───────────────────────────────────────────────────────
+function ChapterHealth({ data }: { data: DashData }) {
+  const metrics = [
+    {
+      label: 'Seats filled',
+      value: data.seatsFilled,
+      max: 34,
+      color: 'bg-brand-red',
+      pct: Math.round((data.seatsFilled / 34) * 100),
+    },
+    {
+      label: 'Email open rate',
+      value: data.openRate,
+      max: 100,
+      color: 'bg-green-500',
+      pct: data.openRate,
+      suffix: '%',
+    },
+    {
+      label: 'Visitor conversion',
+      value: data.conversionRate,
+      max: 100,
+      color: 'bg-brand-blue',
+      pct: data.conversionRate,
+      suffix: '%',
+    },
+  ]
+
+  return (
+    <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4">
+      <div className="flex items-center gap-2 mb-4">
+        <TrendingUp className="w-4 h-4 text-brand-blue" />
+        <h3 className="text-sm font-semibold text-white">Chapter Health</h3>
+      </div>
+      <div className="space-y-4">
+        {metrics.map(({ label, value, pct, color, suffix }) => (
+          <div key={label}>
+            <div className="flex items-center justify-between text-xs mb-1.5">
+              <span className="text-gray-400">{label}</span>
+              <span className="text-gray-200 font-semibold">{value}{suffix ?? ''}</span>
+            </div>
+            <div className="w-full bg-gray-900 rounded-full h-2">
+              <div className={`${color} h-2 rounded-full transition-all duration-700`} style={{ width: `${Math.min(pct, 100)}%` }} />
             </div>
           </div>
-        </div>
-
-      </main>
+        ))}
+      </div>
+      <div className="mt-4 pt-3 border-t border-gray-700 flex items-center justify-between text-xs text-gray-500">
+        <span>Starting Balance: <span className="text-green-400 font-semibold">${data.startingBalance.toFixed(2)}</span></span>
+        <span>Outstanding: <span className="text-red-400 font-semibold">${data.totalOwed.toFixed(2)}</span></span>
+      </div>
     </div>
   )
 }

@@ -1260,6 +1260,8 @@ function SocialTab({ members, speakers, social, refresh }: {
   const [platform, setPlatform] = useState<'facebook' | 'linkedin' | 'instagram'>('facebook')
   const [date, setDate] = useState(today())
   const [spotlightId, setSpotlightId] = useState('')
+  const [speakerMemberId, setSpeakerMemberId] = useState('')
+  const [savingSpeaker, setSavingSpeaker] = useState(false)
   const [winText, setWinText] = useState('')
   const [content, setContent] = useState('')
   const [copied, setCopied] = useState(false)
@@ -1293,16 +1295,18 @@ function SocialTab({ members, speakers, social, refresh }: {
 
   // Build the facts the AI is allowed to use from current chapter data.
   const buildFacts = () => {
-    const todayIso = today()
-    const nextSpeaker = [...speakers].filter((s) => s.date >= todayIso).sort((a, b) => (a.date < b.date ? -1 : 1))[0]
-    const speakerMember = members.find((m) => m.id === nextSpeaker?.member_id)
+    // For speaker posts: find the speaker assigned to the planned date (or closest upcoming)
+    const plannedSpeaker = type === 'speaker'
+      ? (speakers.find((s) => s.date === date) || [...speakers].filter((s) => s.date >= date).sort((a, b) => (a.date < b.date ? -1 : 1))[0])
+      : [...speakers].filter((s) => s.date >= today()).sort((a, b) => (a.date < b.date ? -1 : 1))[0]
+    const speakerMember = members.find((m) => m.id === plannedSpeaker?.member_id)
     const spot = members.find((m) => m.id === spotlightId) ?? members[0]
     return {
       chapterName: 'Think Big St. Louis',
       meetingLine: "Thursdays 11:30 AM at Mike Duffy's Pub & Grill, Kirkwood",
-      speakerName: nextSpeaker && nextSpeaker.name !== 'Speaker Name' ? nextSpeaker.name : undefined,
+      speakerName: plannedSpeaker && plannedSpeaker.name !== 'Speaker Name' ? plannedSpeaker.name : undefined,
       speakerCompany: speakerMember?.company || undefined,
-      speakerDate: nextSpeaker ? longDate(nextSpeaker.date) : undefined,
+      speakerDate: plannedSpeaker ? longDate(plannedSpeaker.date) : undefined,
       spotlightName: type === 'spotlight' ? spot?.name : undefined,
       spotlightRole: type === 'spotlight' ? spot?.role : undefined,
       spotlightCompany: type === 'spotlight' ? spot?.company : undefined,
@@ -1313,15 +1317,16 @@ function SocialTab({ members, speakers, social, refresh }: {
 
   // Build the BNI-branded graphic card for the current post type.
   const graphicData = ((): GraphicData => {
-    const todayIso = today()
-    const nextSpeaker = [...speakers].filter((s) => s.date >= todayIso).sort((a, b) => (a.date < b.date ? -1 : 1))[0]
-    const speakerMember = members.find((m) => m.id === nextSpeaker?.member_id)
+    const plannedSpeaker = type === 'speaker'
+      ? (speakers.find((s) => s.date === date) || [...speakers].filter((s) => s.date >= date).sort((a, b) => (a.date < b.date ? -1 : 1))[0])
+      : [...speakers].filter((s) => s.date >= today()).sort((a, b) => (a.date < b.date ? -1 : 1))[0]
+    const speakerMember = members.find((m) => m.id === plannedSpeaker?.member_id)
     const spot = members.find((m) => m.id === spotlightId) ?? members[0]
     switch (type) {
       case 'open_seats':
         return { kind: 'open_seats' as const, title: 'Seats Open', subtitle: 'One business per profession — exclusive, no competition.', lines: openSeats.slice(0, 8), caption: content || undefined, footerCta: `Claim your seat · ${MEETING_LINE_SHORT}` }
       case 'speaker': {
-        const sName = nextSpeaker && nextSpeaker.name !== 'Speaker Name' ? nextSpeaker.name : 'This Week'
+        const sName = plannedSpeaker && plannedSpeaker.name !== 'Speaker Name' ? plannedSpeaker.name : 'This Week'
         const sCompany = speakerMember?.company || undefined
         return { kind: 'speaker' as const, title: sName, subtitle: sCompany, caption: content || undefined, memberPhoto: speakerMember?.photo || undefined, memberLogo: speakerMember?.logo || undefined, footerCta: MEETING_LINE_SHORT }
       }
