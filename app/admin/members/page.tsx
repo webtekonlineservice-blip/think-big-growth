@@ -252,25 +252,29 @@ export default function AdminMembersPage() {
   return (
     <div className="min-h-screen bg-gray-900">
       {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm">
-              ← Dashboard
+      <header className="border-b border-gray-800 px-4 sm:px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm shrink-0">
+              <span className="sm:hidden">←</span>
+              <span className="hidden sm:inline">← Dashboard</span>
             </Link>
-            <div className="w-px h-4 bg-gray-700" />
-            <div>
+            <div className="w-px h-4 bg-gray-700 shrink-0" />
+            <div className="min-w-0">
               <h1 className="text-lg font-semibold text-white">Members</h1>
-              <p className="text-xs text-gray-500">Think Big St. Louis · {user?.email}</p>
+              <p className="text-xs text-gray-500 truncate">
+                Think Big St. Louis<span className="hidden sm:inline"> · {user?.email}</span>
+              </p>
             </div>
           </div>
-          <button onClick={openAdd} className="btn-primary text-sm px-4 py-2">
-            + Add Member
+          <button onClick={openAdd} className="btn-primary text-sm px-3 sm:px-4 py-2 shrink-0 whitespace-nowrap">
+            <span className="sm:hidden">+ Add</span>
+            <span className="hidden sm:inline">+ Add Member</span>
           </button>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-10 space-y-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6">
         {/* Announcement panel */}
         <div className="card border-brand-red/30 bg-gradient-to-br from-brand-red/5 to-transparent">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -287,7 +291,7 @@ export default function AdminMembersPage() {
                 </p>
               )}
             </div>
-            <div className="flex gap-3 flex-shrink-0">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 flex-shrink-0">
               <button
                 onClick={handleTestAnnounce}
                 disabled={announcing !== null}
@@ -306,7 +310,50 @@ export default function AdminMembersPage() {
           </div>
         </div>
 
-        <div className="card p-0 overflow-x-auto">
+        {/* Mobile card list */}
+        <div className="sm:hidden space-y-3">
+          {members.map((m) => (
+            <div key={m.id} className="card p-4">
+              <div className="flex items-start gap-3">
+                {m.photo
+                  ? <img src={m.photo} alt={m.name} className="w-11 h-11 rounded-full object-cover border border-gray-700 shrink-0" />
+                  : <div className="w-11 h-11 rounded-full bg-brand-red/20 border border-brand-red/30 flex items-center justify-center text-sm font-bold text-brand-red shrink-0">
+                      {m.name.split(' ').map((s: string) => s[0]).slice(0, 2).join('')}
+                    </div>
+                }
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-white font-medium">{m.name}</span>
+                    {m.is_admin && (
+                      <span className="text-[10px] bg-brand-orange/20 text-brand-orange border border-brand-orange/30 px-1.5 py-0.5 rounded-full">Admin</span>
+                    )}
+                  </div>
+                  <p className="text-gray-300 text-sm">{m.role || '—'}</p>
+                  <p className="text-gray-500 text-xs">{m.company || '—'}</p>
+                  <p className="text-gray-400 text-xs mt-1 break-all">{m.email}</p>
+                  <a
+                    href={`${appUrl}/invite/${m.invite_code}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-brand-blue hover:underline text-xs break-all block mt-1"
+                  >
+                    /invite/{m.invite_code}
+                  </a>
+                </div>
+              </div>
+              <div className="flex items-center gap-4 mt-3 pt-3 border-t border-gray-700/50">
+                <button onClick={() => openEdit(m)} className="text-xs text-brand-blue hover:text-white transition-colors">Edit</button>
+                <button onClick={() => openPassword(m)} className="text-xs text-gray-400 hover:text-white transition-colors">Reset PW</button>
+                <button onClick={() => handleDelete(m)} className="text-xs text-red-400 hover:text-red-300 transition-colors">Remove</button>
+              </div>
+            </div>
+          ))}
+          {members.length === 0 && (
+            <div className="card p-8 text-center text-gray-500 text-sm">No members yet.</div>
+          )}
+        </div>
+
+        <div className="hidden sm:block card p-0 overflow-x-auto">
           <table className="w-full text-sm min-w-[750px]">
             <thead>
               <tr className="border-b border-gray-700">

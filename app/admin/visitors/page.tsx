@@ -174,32 +174,38 @@ export default function AdminVisitorsPage() {
   return (
     <div className="min-h-screen bg-gray-900">
       {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm">← Dashboard</Link>
-            <div className="w-px h-4 bg-gray-700" />
-            <div>
-              <h1 className="text-lg font-semibold text-white">Visitors Pipeline</h1>
-              <p className="text-xs text-gray-500">Think Big St. Louis · {user?.email}</p>
+      <header className="border-b border-gray-800 px-4 sm:px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm shrink-0">←</Link>
+            <div className="w-px h-4 bg-gray-700 shrink-0" />
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-semibold text-white truncate">Visitors Pipeline</h1>
+              <p className="text-xs text-gray-500 truncate hidden sm:block">Think Big St. Louis · {user?.email}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-400">{visitors.length} total</span>
-            <button onClick={() => setAddModal(true)} className="btn-primary text-xs px-4 py-2">+ Add Visitor</button>
-          </div>
+          <button onClick={() => setAddModal(true)} className="btn-primary text-xs px-3 sm:px-4 py-2 shrink-0 whitespace-nowrap">+ Add</button>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8 space-y-4">
 
-        {/* Status filter tabs */}
-        <div className="flex items-center gap-2 flex-wrap">
+        {/* Search — full width on mobile */}
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name, email, company…"
+          className="input-field text-sm py-2 w-full"
+        />
+
+        {/* Status filter tabs — horizontal scroll on mobile */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1">
           {ALL_STATUSES.map((s) => (
             <button
               key={s}
               onClick={() => setStatusFilter(s)}
-              className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+              className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors ${
                 statusFilter === s
                   ? 'bg-brand-blue text-white border-brand-blue'
                   : 'text-gray-400 border-gray-700 hover:border-gray-500'
@@ -209,26 +215,58 @@ export default function AdminVisitorsPage() {
               <span className="ml-1.5 text-xs opacity-70">{counts[s]}</span>
             </button>
           ))}
-
-          {/* Search */}
-          <div className="ml-auto flex items-center gap-2">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name, email, company…"
-              className="input-field text-sm py-1.5 w-64"
-            />
-          </div>
+          <span className="shrink-0 text-xs text-gray-600 ml-auto pl-2">{visitors.length} total</span>
         </div>
 
-        {/* Table */}
+        {/* Empty state */}
         {filtered.length === 0 ? (
           <div className="card text-center py-16">
             <p className="text-gray-400 text-sm">No visitors match your filters.</p>
           </div>
         ) : (
-          <div className="card p-0 overflow-x-auto">
+        <>
+        {/* Mobile: stacked cards */}
+        <div className="sm:hidden space-y-2">
+          {filtered.map((v) => (
+            <div key={v.id} className="bg-gray-800/60 border border-gray-700 rounded-xl p-3.5">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">{v.first_name} {v.last_name}</p>
+                  {v.company && <p className="text-xs text-gray-500">{v.company}{v.business_type ? ` · ${v.business_type}` : ''}</p>}
+                </div>
+                <select
+                  value={v.status}
+                  onChange={(e) => handleStatusChange(v.id, e.target.value as Visitor['status'])}
+                  className={`text-xs font-medium border rounded-full px-2.5 py-1 bg-transparent cursor-pointer shrink-0 ${STATUS_STYLES[v.status]}`}
+                >
+                  <option value="invited">Invited</option>
+                  <option value="visited">Visited</option>
+                  <option value="applied">Applied</option>
+                  <option value="member">Member</option>
+                </select>
+              </div>
+              <div className="space-y-0.5 text-xs text-gray-400 mb-3">
+                {v.email && <p className="truncate">✉️ {v.email}</p>}
+                {v.phone && <p>📱 {v.phone}</p>}
+                <p className="text-gray-600">
+                  {v.visit_date
+                    ? `Visited ${new Date(v.visit_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                    : 'No visit date'}
+                  {v.referral_source ? ` · via ${v.referral_source}` : ''}
+                </p>
+                {v.notes && <p className="text-gray-500 italic truncate">{v.notes}</p>}
+              </div>
+              <div className="flex items-center gap-4 pt-2 border-t border-gray-700/50">
+                <button onClick={() => openDrawer(v)} className="text-xs text-brand-blue">Edit Notes</button>
+                {v.phone && <button onClick={() => setSmsModal({ phone: v.phone, name: `${v.first_name} ${v.last_name}` })} className="text-xs text-gray-400">SMS</button>}
+                <button onClick={() => handleDelete(v)} className="text-xs text-red-400 ml-auto">Remove</button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop: table */}
+        <div className="hidden sm:block card p-0 overflow-x-auto">
             <table className="w-full text-sm min-w-[900px]">
               <thead>
                 <tr className="border-b border-gray-700">
@@ -299,6 +337,7 @@ export default function AdminVisitorsPage() {
               </tbody>
             </table>
           </div>
+        </>
         )}
       </main>
 
