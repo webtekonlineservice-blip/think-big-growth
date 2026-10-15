@@ -93,17 +93,18 @@ export default function TreasurerPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-gray-800/60 rounded-xl p-1 w-full sm:w-fit mb-5">
-        {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition ${
-              tab === t.id ? 'bg-brand-blue text-white' : 'text-gray-400 hover:text-white'
-            }`}>
-            <t.Icon className="w-4 h-4" />
-            <span className="hidden sm:inline">{t.label}</span>
-            <span className="sm:hidden text-xs">{t.label.split(' ')[0]}</span>
-          </button>
-        ))}
+      <div className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-5 overflow-x-auto no-scrollbar">
+        <div className="flex gap-1 bg-gray-800/60 rounded-xl p-1 w-max sm:w-fit">
+          {TABS.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`flex items-center justify-center gap-1.5 px-3.5 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition whitespace-nowrap ${
+                tab === t.id ? 'bg-brand-blue text-white' : 'text-gray-400 hover:text-white'
+              }`}>
+              <t.Icon className="w-4 h-4 shrink-0" />
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
