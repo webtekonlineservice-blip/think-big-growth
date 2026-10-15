@@ -19,11 +19,15 @@ interface Transaction {
   id: string; type: 'income' | 'expense'; category: string
   description: string; amount: number; date: string; notes: string
 }
+interface Visitor { id: string; first_name: string; last_name: string; company?: string }
 interface Speaker { id: string; date: string; member_id: string | null; name: string }
 interface SocialPost { id: string; date: string; platform: 'facebook' | 'linkedin' | 'instagram'; type: string; content: string; status: 'idea' | 'drafted' | 'scheduled' | 'posted' }
 
 const INCOME_CATEGORIES = ['Member Payment', 'Guest Fee', 'Event Income', 'Dues', '50/50 Collected', 'Other Income']
 const EXPENSE_CATEGORIES = ['Weekly Lunch', '50/50 Payout', 'Room Rental', 'Supplies', 'Marketing', 'Event Expense', 'Other Expense']
+// Income categories where the payment should be tied to a specific person.
+const PERSON_CATEGORIES = ['Member Payment', 'Guest Fee', 'Dues']
+const isPersonCategory = (c: string) => PERSON_CATEGORIES.includes(c)
 const LUNCH_PRICE = 24
 const WEEKLY_DUES = 4
 const STARTING_BALANCE_DEFAULT = 3201.49
@@ -40,6 +44,7 @@ export default function TreasurerPage() {
   const [tab, setTab] = useState<'ledger' | 'transactions' | 'report' | 'slides' | 'speakers' | 'social'>('ledger')
 
   const [members, setMembers] = useState<Member[]>([])
+  const [visitors, setVisitors] = useState<Visitor[]>([])
   const [ledger, setLedger] = useState<LedgerEntry[]>([])
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [startingBalance, setStartingBalance] = useState<number>(STARTING_BALANCE_DEFAULT)
@@ -49,8 +54,9 @@ export default function TreasurerPage() {
   const [loading, setLoading] = useState(true)
 
   const fetchAll = useCallback(async () => {
-    const [m, l, t, s, sp, so] = await Promise.all([
+    const [m, v, l, t, s, sp, so] = await Promise.all([
       fetch('/api/members').then((r) => (r.ok ? r.json() : [])),
+      fetch('/api/visitors').then((r) => (r.ok ? r.json() : [])),
       fetch('/api/treasurer/ledger').then((r) => (r.ok ? r.json() : [])),
       fetch('/api/treasurer/transactions').then((r) => (r.ok ? r.json() : [])),
       fetch('/api/treasurer/settings').then((r) => (r.ok ? r.json() : null)),
@@ -58,6 +64,7 @@ export default function TreasurerPage() {
       fetch('/api/treasurer/social').then((r) => (r.ok ? r.json() : [])),
     ])
     setMembers(m)
+    setVisitors(Array.isArray(v) ? v : [])
     setLedger(l)
     setTransactions(t)
     setSpeakers(sp)
@@ -112,7 +119,7 @@ export default function TreasurerPage() {
       ) : (
         <>
           {tab === 'ledger' && <LedgerTab members={members} ledger={ledger} refresh={fetchAll} startingBalance={startingBalance} />}
-          {tab === 'transactions' && <TransactionsTab transactions={transactions} refresh={fetchAll} />}
+          {tab === 'transactions' && <TransactionsTab transactions={transactions} members={members} visitors={visitors} refresh={fetchAll} />}
           {tab === 'report' && <ReportTab members={members} ledger={ledger} transactions={transactions} userEmail={user.email} startingBalance={startingBalance} />}
           {tab === 'slides' && <SlidesTab members={members} ledger={ledger} transactions={transactions} speakers={speakers} startingBalance={startingBalance} pendingMembers={pendingMembers} refresh={fetchAll} />}
           {tab === 'speakers' && <SpeakersTab members={members} speakers={speakers} refresh={fetchAll} />}
@@ -602,7 +609,7 @@ function PaymentForm({ members, ledger, onDone, onCancel }: { members: Member[];
 }
 
 // ─── Transactions Tab ─────────────────────────────────────────────────────────
-function TransactionsTab({ transactions, refresh }: { transactions: Transaction[]; refresh: () => Promise<void> }) {
+function TransactionsTab({ transactions, members, visitors, refresh }: { transactions: Transaction[]; members: Member[]; visitors: Visitor[]; refresh: () => Promise<void> }) {
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all')
   const [editing, setEditing] = useState<Transaction | null>(null)
@@ -654,7 +661,7 @@ function TransactionsTab({ transactions, refresh }: { transactions: Transaction[
         <button onClick={() => setShowForm((v) => !v)} className={BTN_PRIMARY}><Plus className="w-4 h-4" /> Add Transaction</button>
       </div>
 
-      {showForm && <TransactionForm onDone={async () => { setShowForm(false); await refresh() }} onCancel={() => setShowForm(false)} />}
+      {showForm && <TransactionForm members={members} visitors={visitors} onDone={async () => { setShowForm(false); await refresh() }} onCancel={() => setShowForm(false)} />}
 
       <div className="space-y-2">
         {filtered.length === 0 ? <p className="text-sm text-gray-500 text-center py-8">No transactions yet.</p> :
@@ -665,13 +672,13 @@ function TransactionsTab({ transactions, refresh }: { transactions: Transaction[
                 <div className="px-4 py-3 space-y-3">
                   <div className="flex rounded-lg overflow-hidden border border-gray-700 w-fit">
                     {(['income', 'expense'] as const).map((ty) => (
-                      <button key={ty} onClick={() => setEditForm((f) => ({ ...f, type: ty, category: ty === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0] }))}
+                      <button key={ty} onClick={() => setEditForm((f) => ({ ...f, type: ty, category: ty === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0], description: '' }))}
                         className={`px-4 py-1.5 text-xs font-medium capitalize transition ${editForm.type === ty ? (ty === 'income' ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'bg-gray-900 text-gray-500'}`}>{ty}</button>
                     ))}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div><label className="block text-xs text-gray-500 mb-1">Category</label>
-                      <select value={editForm.category} onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))} className={INPUT}>
+                      <select value={editForm.category} onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value, description: isPersonCategory(e.target.value) !== isPersonCategory(f.category) ? '' : f.description }))} className={INPUT}>
                         {(editForm.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map((c) => <option key={c}>{c}</option>)}
                       </select>
                     </div>
@@ -681,9 +688,13 @@ function TransactionsTab({ transactions, refresh }: { transactions: Transaction[
                     <div><label className="block text-xs text-gray-500 mb-1">Amount ($)</label>
                       <input type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))} className={INPUT} />
                     </div>
-                    <div><label className="block text-xs text-gray-500 mb-1">Description</label>
-                      <input value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))} className={INPUT} />
-                    </div>
+                    {editForm.type === 'income' && isPersonCategory(editForm.category) ? (
+                      <PersonPicker members={members} visitors={visitors} value={editForm.description} onChange={(name) => setEditForm((f) => ({ ...f, description: name }))} />
+                    ) : (
+                      <div><label className="block text-xs text-gray-500 mb-1">Description</label>
+                        <input value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))} className={INPUT} />
+                      </div>
+                    )}
                     <div className="col-span-2"><label className="block text-xs text-gray-500 mb-1">Notes</label>
                       <input value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Optional notes…" className={INPUT} />
                     </div>
@@ -712,13 +723,49 @@ function TransactionsTab({ transactions, refresh }: { transactions: Transaction[
   )
 }
 
-function TransactionForm({ onDone, onCancel }: { onDone: () => Promise<void>; onCancel: () => void }) {
+// Picker that lets you attach an income payment to a specific member or visitor.
+// Setting the person fills the transaction description with their name.
+function PersonPicker({
+  members, visitors, value, onChange,
+}: {
+  members: Member[]; visitors: Visitor[]; value: string; onChange: (name: string) => void
+}) {
+  const memberNames = members.map((m) => m.name)
+  const visitorNames = visitors.map((v) => `${v.first_name} ${v.last_name}`.trim())
+  // Which bucket is the current value in? Default to member unless it matches a visitor.
+  const [kind, setKind] = useState<'member' | 'visitor'>(
+    value && visitorNames.includes(value) && !memberNames.includes(value) ? 'visitor' : 'member'
+  )
+  const names = kind === 'member' ? memberNames : visitorNames
+
+  return (
+    <div className="sm:col-span-2">
+      <label className="block text-xs text-gray-500 mb-1">Paid by</label>
+      <div className="flex gap-2">
+        <div className="flex rounded-lg overflow-hidden border border-gray-700 shrink-0">
+          {(['member', 'visitor'] as const).map((k) => (
+            <button key={k} type="button" onClick={() => { setKind(k); onChange('') }}
+              className={`px-3 py-2 text-xs font-medium capitalize transition ${kind === k ? 'bg-gray-700 text-white' : 'bg-gray-900 text-gray-500 hover:text-gray-300'}`}>{k}</button>
+          ))}
+        </div>
+        <select value={names.includes(value) ? value : ''} onChange={(e) => onChange(e.target.value)} className={INPUT}>
+          <option value="">Select {kind}…</option>
+          {names.map((n) => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </div>
+    </div>
+  )
+}
+
+function TransactionForm({ members, visitors, onDone, onCancel }: { members: Member[]; visitors: Visitor[]; onDone: () => Promise<void>; onCancel: () => void }) {
   const [form, setForm] = useState({ type: 'income' as 'income' | 'expense', category: 'Member Payment', description: '', amount: '', date: today(), notes: '' })
   const [saving, setSaving] = useState(false)
   const cats = form.type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  const needsPerson = form.type === 'income' && isPersonCategory(form.category)
 
   const submit = async () => {
     if (!form.amount) return
+    if (needsPerson && !form.description.trim()) return
     setSaving(true)
     await fetch('/api/treasurer/transactions', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -732,18 +779,22 @@ function TransactionForm({ onDone, onCancel }: { onDone: () => Promise<void>; on
     <div className={CARD + ' p-4 space-y-4'}>
       <div className="flex rounded-lg overflow-hidden border border-gray-700 w-fit">
         {(['income', 'expense'] as const).map((ty) => (
-          <button key={ty} onClick={() => setForm((f) => ({ ...f, type: ty, category: ty === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0] }))}
+          <button key={ty} onClick={() => setForm((f) => ({ ...f, type: ty, category: ty === 'income' ? INCOME_CATEGORIES[0] : EXPENSE_CATEGORIES[0], description: '' }))}
             className={`px-5 py-2 text-sm font-medium capitalize transition ${form.type === ty ? (ty === 'income' ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'bg-gray-900 text-gray-500'}`}>{ty}</button>
         ))}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div><label className="block text-xs text-gray-500 mb-1">Category</label><select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} className={INPUT}>{cats.map((c) => <option key={c}>{c}</option>)}</select></div>
+        <div><label className="block text-xs text-gray-500 mb-1">Category</label><select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value, description: '' }))} className={INPUT}>{cats.map((c) => <option key={c}>{c}</option>)}</select></div>
         <div><label className="block text-xs text-gray-500 mb-1">Date</label><input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={INPUT} /></div>
         <div><label className="block text-xs text-gray-500 mb-1">Amount ($)</label><input type="number" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="0.00" className={INPUT} /></div>
-        <div><label className="block text-xs text-gray-500 mb-1">Description</label><input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className={INPUT} /></div>
+        {needsPerson ? (
+          <PersonPicker members={members} visitors={visitors} value={form.description} onChange={(name) => setForm((f) => ({ ...f, description: name }))} />
+        ) : (
+          <div><label className="block text-xs text-gray-500 mb-1">Description</label><input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className={INPUT} /></div>
+        )}
       </div>
       <div className="flex gap-2">
-        <button onClick={submit} disabled={saving} className={BTN_PRIMARY}>{saving ? 'Saving…' : 'Add Transaction'}</button>
+        <button onClick={submit} disabled={saving || (needsPerson && !form.description.trim())} className={BTN_PRIMARY}>{saving ? 'Saving…' : 'Add Transaction'}</button>
         <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-800 transition">Cancel</button>
       </div>
     </div>
