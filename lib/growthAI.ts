@@ -204,6 +204,7 @@ export async function growthChat(
     'You are now in conversational advisor mode. Answer the chapter leader directly and practically.',
     'Ground every answer in the snapshot below. If asked to draft outreach, write ready-to-send copy.',
     'Never invent member names, companies, numbers, or wins beyond the snapshot. Be concise.',
+    'Format replies in clean Markdown: use **bold** for emphasis, numbered lists for prioritized steps, and bullet lists for options. Keep paragraphs short. Do not use tables or code fences.',
     '',
     'CURRENT SNAPSHOT:',
     snapshotBriefing(snapshot),

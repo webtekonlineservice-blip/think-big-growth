@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
+import Markdown from '@/components/Markdown'
 import {
   TrendingUp, Sparkles, RefreshCw, Send, Users, Megaphone,
   Target, Share2, CheckCircle2, Loader2, AlertTriangle, ArrowRight,
@@ -360,8 +361,8 @@ function ChatTab() {
         )}
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${m.role === 'user' ? 'bg-brand-blue text-white' : 'bg-gray-900/70 border border-gray-700 text-gray-200'}`}>
-              {m.content}
+            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${m.role === 'user' ? 'bg-brand-blue text-white whitespace-pre-wrap' : 'bg-gray-900/70 border border-gray-700 text-gray-200'}`}>
+              {m.role === 'user' ? m.content : <Markdown content={m.content} />}
             </div>
           </div>
         ))}
