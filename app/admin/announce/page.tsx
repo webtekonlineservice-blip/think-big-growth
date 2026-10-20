@@ -27,31 +27,43 @@ export default function AnnouncePage() {
 
   const sendTest = async () => {
     setSending(true); setResult(null)
-    const res = await fetch('/api/members/announce', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ test: true, to: testEmail }),
-    })
-    const data = await res.json()
-    setResult(res.ok
-      ? { ok: true, msg: `Test sent to ${data.sent_to}. Check your inbox.` }
-      : { ok: false, msg: data.error || 'Failed to send.' })
-    setSending(false)
+    try {
+      const res = await fetch('/api/members/announce', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ test: true, to: testEmail }),
+      })
+      const data = await res.json()
+      setResult(res.ok
+        ? { ok: true, msg: `Test sent to ${data.sent_to}. Check your inbox.` }
+        : { ok: false, msg: data.error || 'Failed to send.' })
+    } catch {
+      setResult({ ok: false, msg: 'Network error.' })
+    } finally {
+      setSending(false)
+    }
   }
 
   const sendAll = async () => {
     if (!confirm(`Send the announcement to all ${members.length} members with real emails? This cannot be undone.`)) return
     setSending(true); setResult(null)
-    const res = await fetch('/api/members/announce', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ all: true }),
-    })
-    const data = await res.json()
-    setResult(res.ok
-      ? { ok: true, msg: `Sent to ${data.sent} members (${data.failed} failed).` }
-      : { ok: false, msg: data.error || 'Failed to send.' })
-    setSending(false)
+    try {
+      const res = await fetch('/api/members/announce', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ all: true }),
+      })
+      const data = await res.json()
+      setResult(res.ok
+        ? { ok: true, msg: `Sent to ${data.sent} members (${data.failed} failed).` }
+        : { ok: false, msg: data.error || 'Failed to send.' })
+    } catch {
+      setResult({ ok: false, msg: 'Network error.' })
+    } finally {
+      setSending(false)
+    }
   }
 
   if (authLoading || loading) {
@@ -66,10 +78,17 @@ export default function AnnouncePage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-8 space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-white">📣 Chapter Announcement</h1>
-        <p className="text-sm text-gray-500">Send the platform showcase email to members. Always test first, then send to everyone.</p>
+    <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-3 sm:gap-4">
+        <a href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm shrink-0">
+          <span className="sm:hidden">←</span><span className="hidden sm:inline">← Dashboard</span>
+        </a>
+        <div className="w-px h-4 bg-gray-700 shrink-0" />
+        <div>
+          <h1 className="text-xl font-bold text-white">📣 Chapter Announcement</h1>
+          <p className="text-sm text-gray-500">Send the platform showcase email to members. Always test first.</p>
+        </div>
       </div>
 
       {/* What gets sent */}

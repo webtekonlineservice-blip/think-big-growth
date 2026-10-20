@@ -90,6 +90,7 @@ export default function AdminSeatsPage() {
         `/api/seats/${encodeURIComponent(seat.profession)}`,
         {
           method: 'PATCH',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ active: activate }),
         }
@@ -123,6 +124,7 @@ export default function AdminSeatsPage() {
         `/api/seats/${encodeURIComponent(seat.profession)}/scrape`,
         {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ max: 30 }),
         }
@@ -166,41 +168,36 @@ export default function AdminSeatsPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0f1e]">
-      <header className="border-b border-gray-800/60 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm">
-              ← Dashboard
+      <header className="border-b border-gray-800/60 px-4 sm:px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm shrink-0">
+              <span className="sm:hidden">←</span><span className="hidden sm:inline">← Dashboard</span>
             </Link>
-            <div className="w-px h-4 bg-gray-700" />
-            <div>
+            <div className="w-px h-4 bg-gray-700 shrink-0" />
+            <div className="min-w-0">
               <h1 className="text-lg font-semibold text-white">BNI Seats</h1>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 truncate">
                 {counts.filled} filled · {counts.active} active · {counts.paused} paused · {counts.open} open
               </p>
             </div>
           </div>
           {/* Active seat slot meter */}
-          <div className="flex items-center gap-3">
-            <div className="text-right">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="text-right hidden sm:block">
               <p className="text-xs text-gray-400 font-medium">Active slots</p>
               <p className="text-xs text-gray-500">{counts.active} / {MAX_ACTIVE_SEATS} running</p>
             </div>
             <div className="flex gap-1">
               {Array.from({ length: MAX_ACTIVE_SEATS }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`w-3 h-6 rounded-sm transition-colors ${
-                    i < counts.active ? 'bg-brand-indigo' : 'bg-gray-700'
-                  }`}
-                />
+                <div key={i} className={`w-2.5 sm:w-3 h-5 sm:h-6 rounded-sm transition-colors ${i < counts.active ? 'bg-brand-indigo' : 'bg-gray-700'}`} />
               ))}
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
 
         {/* Flash message */}
         {message && (
@@ -274,7 +271,7 @@ export default function AdminSeatsPage() {
             placeholder="Search profession…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="input-field py-2 text-sm w-64"
+            className="input-field py-2 text-sm w-full sm:w-64"
           />
           {filter !== 'all' && (
             <button onClick={() => setFilter('all')} className="text-xs text-gray-400 hover:text-white transition-colors">

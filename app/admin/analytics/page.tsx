@@ -61,20 +61,22 @@ export default function AdminAnalyticsPage() {
   return (
     <div className="min-h-screen bg-gray-900">
       {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm">← Dashboard</Link>
-            <div className="w-px h-4 bg-gray-700" />
-            <div>
+      <header className="border-b border-gray-800 px-4 sm:px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm shrink-0">
+              <span className="sm:hidden">←</span><span className="hidden sm:inline">← Dashboard</span>
+            </Link>
+            <div className="w-px h-4 bg-gray-700 shrink-0" />
+            <div className="min-w-0">
               <h1 className="text-lg font-semibold text-white">Analytics</h1>
-              <p className="text-xs text-gray-500">Think Big St. Louis · Chapter Growth</p>
+              <p className="text-xs text-gray-500 truncate">Think Big St. Louis · Chapter Growth</p>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-10 space-y-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-8 sm:space-y-10">
 
         {/* Top stats */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
@@ -176,41 +178,65 @@ export default function AdminAnalyticsPage() {
 
         {/* Top inviters */}
         <div className="card p-0 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-700">
+          <div className="px-4 sm:px-6 py-4 border-b border-gray-700">
             <h2 className="text-base font-semibold text-white">Top Inviters</h2>
             <p className="text-xs text-gray-500 mt-0.5">Members ranked by visitors invited</p>
           </div>
           {topInviters.length === 0 ? (
             <p className="px-6 py-10 text-gray-500 text-sm">No invite data yet.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  {['#', 'Member', 'Company', 'Invited', 'Converted', 'Conv. Rate'].map((h) => (
-                    <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-6 py-3">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Mobile cards */}
+              <div className="sm:hidden divide-y divide-gray-700/50">
                 {topInviters.map((inv, i) => {
                   const rate = inv.total > 0 ? Math.round((inv.converted / inv.total) * 100) : 0
                   return (
-                    <tr key={inv.id} className={`${i < topInviters.length - 1 ? 'border-b border-gray-700/50' : ''} hover:bg-gray-700/20`}>
-                      <td className="px-6 py-3 text-gray-500 text-xs font-mono">#{i + 1}</td>
-                      <td className="px-6 py-3 text-white font-medium">{inv.name}</td>
-                      <td className="px-6 py-3 text-gray-400 text-sm">{inv.company || '—'}</td>
-                      <td className="px-6 py-3 text-brand-blue font-semibold">{inv.total}</td>
-                      <td className="px-6 py-3 text-green-400 font-semibold">{inv.converted}</td>
-                      <td className="px-6 py-3">
-                        <span className={`text-xs font-semibold ${rate >= 50 ? 'text-green-400' : rate >= 25 ? 'text-yellow-400' : 'text-gray-400'}`}>
-                          {rate}%
-                        </span>
-                      </td>
-                    </tr>
+                    <div key={inv.id} className="px-4 py-3 flex items-center gap-3">
+                      <span className="text-gray-600 text-xs font-mono w-5 shrink-0">#{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium text-sm truncate">{inv.name}</p>
+                        <p className="text-gray-500 text-xs truncate">{inv.company || '—'}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-brand-blue text-sm font-semibold">{inv.total} invited</p>
+                        <p className={`text-xs font-semibold ${rate >= 50 ? 'text-green-400' : rate >= 25 ? 'text-yellow-400' : 'text-gray-400'}`}>
+                          {inv.converted} converted · {rate}%
+                        </p>
+                      </div>
+                    </div>
                   )
                 })}
-              </tbody>
-            </table>
+              </div>
+              {/* Desktop table */}
+              <table className="hidden sm:table w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-700">
+                    {['#', 'Member', 'Company', 'Invited', 'Converted', 'Conv. Rate'].map((h) => (
+                      <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-6 py-3">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {topInviters.map((inv, i) => {
+                    const rate = inv.total > 0 ? Math.round((inv.converted / inv.total) * 100) : 0
+                    return (
+                      <tr key={inv.id} className={`${i < topInviters.length - 1 ? 'border-b border-gray-700/50' : ''} hover:bg-gray-700/20`}>
+                        <td className="px-6 py-3 text-gray-500 text-xs font-mono">#{i + 1}</td>
+                        <td className="px-6 py-3 text-white font-medium">{inv.name}</td>
+                        <td className="px-6 py-3 text-gray-400 text-sm">{inv.company || '—'}</td>
+                        <td className="px-6 py-3 text-brand-blue font-semibold">{inv.total}</td>
+                        <td className="px-6 py-3 text-green-400 font-semibold">{inv.converted}</td>
+                        <td className="px-6 py-3">
+                          <span className={`text-xs font-semibold ${rate >= 50 ? 'text-green-400' : rate >= 25 ? 'text-yellow-400' : 'text-gray-400'}`}>
+                            {rate}%
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </>
           )}
         </div>
 

@@ -27,6 +27,7 @@ export default function EmailTestPage() {
     try {
       const res = await fetch('/api/email-preview', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to, step, test_name: testName, test_company: testCompany, test_profession: testProfession }),
       })
@@ -52,18 +53,20 @@ export default function EmailTestPage() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <header className="border-b border-gray-800 px-6 py-4">
-        <div className="max-w-3xl mx-auto flex items-center gap-4">
-          <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm">← Dashboard</Link>
-          <div className="w-px h-4 bg-gray-700" />
-          <div>
+      <header className="border-b border-gray-800 px-4 sm:px-6 py-4">
+        <div className="max-w-3xl mx-auto flex items-center gap-3 sm:gap-4">
+          <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm shrink-0">
+            <span className="sm:hidden">←</span><span className="hidden sm:inline">← Dashboard</span>
+          </Link>
+          <div className="w-px h-4 bg-gray-700 shrink-0" />
+          <div className="min-w-0">
             <h1 className="text-lg font-semibold text-white">Email Test Lab</h1>
-            <p className="text-xs text-gray-500">Preview and send test emails to yourself</p>
+            <p className="text-xs text-gray-500 truncate">Preview and send test emails to yourself</p>
           </div>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-10 space-y-6">
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-10 space-y-6">
 
         {/* Info box */}
         <div className="card border-brand-blue/30 bg-gradient-to-br from-brand-blue/5 to-transparent">
@@ -102,7 +105,7 @@ export default function EmailTestPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="label">Test Name</label>
               <input className="input-field" value={testName} onChange={(e) => setTestName(e.target.value)} placeholder="John" />
