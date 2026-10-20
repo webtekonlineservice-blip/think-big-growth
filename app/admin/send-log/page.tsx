@@ -57,7 +57,7 @@ export default function SendLogPage() {
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchLogs = async (p: number) => {
-    const res = await fetch(`/api/outreach-logs?page=${p}&limit=50`)
+    const res = await fetch(`/api/outreach-logs?page=${p}&limit=50`, { credentials: 'include' })
     if (res.ok) {
       const data = await res.json()
       setLogs(data.logs)
@@ -75,6 +75,7 @@ export default function SendLogPage() {
     try {
       const res = await fetch('/api/email-preview', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: undefined, // uses session email server-side
@@ -106,18 +107,20 @@ export default function SendLogPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm">← Dashboard</Link>
-          <div className="w-px h-4 bg-gray-700" />
-          <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm shrink-0">
+            <span className="sm:hidden">←</span><span className="hidden sm:inline">← Dashboard</span>
+          </Link>
+          <div className="w-px h-4 bg-gray-700 shrink-0" />
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-white">Send Log</h1>
-            <p className="text-sm text-gray-500">All SMS and email messages sent by the platform</p>
+            <p className="text-sm text-gray-500 truncate">All SMS and email messages sent by the platform</p>
           </div>
         </div>
-        <span className="text-sm text-gray-400">{total.toLocaleString()} total messages</span>
+        <span className="text-xs sm:text-sm text-gray-400 shrink-0 whitespace-nowrap">{total.toLocaleString()} total</span>
       </div>
 
       {previewResult && (
@@ -132,7 +135,45 @@ export default function SendLogPage() {
           <p className="text-gray-500 text-sm">No messages sent yet.</p>
         </div>
       ) : (
-        <div className="card p-0 overflow-x-auto">
+        <>
+        {/* Mobile card list */}
+        <div className="sm:hidden space-y-3">
+          {logs.map((log) => (
+            <div key={log.id} className="card p-4">
+              <div className="flex items-start justify-between gap-2">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${CHANNEL_STYLES[log.channel] || 'text-gray-400'}`}>
+                  {log.channel.toUpperCase()}
+                </span>
+                {log.status === 'sent'
+                  ? <span className="text-green-400 text-xs font-medium">✓ Sent</span>
+                  : <span className="text-red-400 text-xs font-medium" title={log.error || ''}>✗ Failed</span>}
+              </div>
+              <p className="text-white text-sm font-medium mt-2">{STEP_LABELS[log.step] || log.step}</p>
+              <p className="text-gray-600 text-xs">{log.campaign_name || TYPE_LABELS[log.type] || 'Email'}</p>
+              <p className="text-gray-300 text-xs font-mono mt-1.5 break-all">{log.to}</p>
+              {log.prospect_name && <p className="text-gray-500 text-xs">{log.prospect_name}</p>}
+              {log.credited_to && <p className="text-brand-indigo text-xs font-medium mt-1">Credited: {log.credited_to}</p>}
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-700/50">
+                <span className="text-gray-500 text-xs">
+                  {new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {' · '}
+                  {new Date(log.date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </span>
+                {log.channel === 'email' && log.step.startsWith('sequence_') && (
+                  <button
+                    onClick={() => handlePreview(log)}
+                    disabled={previewing === log.id}
+                    className="text-xs text-brand-blue hover:text-white transition-colors disabled:opacity-40"
+                  >
+                    {previewing === log.id ? 'Sending…' : 'Preview →'}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden sm:block card p-0 overflow-x-auto">
           <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="border-b border-gray-700">
@@ -210,6 +251,7 @@ export default function SendLogPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {/* Pagination */}
@@ -225,7 +267,7 @@ export default function SendLogPage() {
           <span className="text-sm text-gray-500">Page {page} of {Math.ceil(total / 50)}</span>
           <button
             onClick={() => fetchLogs(page + 1)}
-            disabled={logs.length < 50}
+            disabled={page >= Math.ceil(total / 50)}
             className="btn-ghost text-xs px-3 py-1.5 disabled:opacity-30"
           >
             Next →

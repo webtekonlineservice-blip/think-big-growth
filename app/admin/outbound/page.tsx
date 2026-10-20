@@ -85,12 +85,12 @@ export default function AdminOutboundPage() {
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null)
 
   const fetchCampaigns = useCallback(async () => {
-    const res = await fetch('/api/prospects/campaigns')
+    const res = await fetch('/api/prospects/campaigns', { credentials: 'include' })
     if (res.ok) setCampaigns(await res.json())
   }, [])
 
   const fetchProspects = useCallback(async (campaignId: string) => {
-    const res = await fetch(`/api/prospects?campaign_id=${campaignId}&limit=100`)
+    const res = await fetch(`/api/prospects?campaign_id=${campaignId}&limit=100`, { credentials: 'include' })
     if (res.ok) {
       const data = await res.json()
       setProspects(data.prospects)
@@ -111,6 +111,7 @@ export default function AdminOutboundPage() {
     setCreating(true)
     const res = await fetch('/api/prospects/campaigns', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newName, sequence: DEFAULT_SEQUENCE }),
     })
@@ -157,6 +158,7 @@ export default function AdminOutboundPage() {
     if (!selectedCampaign) return
     await fetch(`/api/prospects/campaigns/${selectedCampaign}`, {
       method: 'PATCH',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ batch_size: batchSize }),
     })
@@ -169,6 +171,7 @@ export default function AdminOutboundPage() {
     setTogglingActive(true)
     const res = await fetch(`/api/prospects/campaigns/${selectedCampaign}`, {
       method: 'PATCH',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: !campaign.active }),
     })
@@ -182,12 +185,12 @@ export default function AdminOutboundPage() {
     setSendingBatch(true)
     setBatchResult(null)
     try {
-      const res = await fetch(`/api/prospects/campaigns/${selectedCampaign}/send`, { method: 'POST' })
+      const res = await fetch(`/api/prospects/campaigns/${selectedCampaign}/send`, { method: 'POST', credentials: 'include' })
       const data = await res.json()
       if (res.ok) {
         setBatchResult(`Sent ${data.sent} emails. Refresh to see updated stats.`)
         // Refresh campaigns
-        const cr = await fetch('/api/prospects/campaigns')
+        const cr = await fetch('/api/prospects/campaigns', { credentials: 'include' })
         if (cr.ok) setCampaigns(await cr.json())
       } else {
         setBatchResult(data.error || 'Send failed.')
@@ -216,6 +219,7 @@ export default function AdminOutboundPage() {
 
     const res = await fetch('/api/prospects', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ campaign_id: selectedCampaign, prospects: normalized }),
     })
@@ -245,23 +249,25 @@ export default function AdminOutboundPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0f1e]">
-      <header className="border-b border-gray-800/60 px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm">← Dashboard</Link>
-            <div className="w-px h-4 bg-gray-700" />
-            <div>
+      <header className="border-b border-gray-800/60 px-4 sm:px-6 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <Link href="/admin" className="text-gray-400 hover:text-white transition-colors text-sm shrink-0">
+              <span className="sm:hidden">←</span><span className="hidden sm:inline">← Dashboard</span>
+            </Link>
+            <div className="w-px h-4 bg-gray-700 shrink-0" />
+            <div className="min-w-0">
               <h1 className="text-lg font-semibold text-white">Outbound Email</h1>
-              <p className="text-xs text-gray-500">Import prospects, run drip sequences, track results</p>
+              <p className="text-xs text-gray-500 truncate">Import prospects, run drip sequences, track results</p>
             </div>
           </div>
-          <button onClick={() => setShowCreate(true)} className="btn-primary text-sm px-4 py-2">
-            + New Campaign
+          <button onClick={() => setShowCreate(true)} className="btn-primary text-sm px-3 sm:px-4 py-2 shrink-0 whitespace-nowrap">
+            <span className="sm:hidden">+ New</span><span className="hidden sm:inline">+ New Campaign</span>
           </button>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6 sm:space-y-8">
 
         {/* Campaign selector + stats */}
         {campaigns.length === 0 ? (
@@ -415,9 +421,36 @@ export default function AdminOutboundPage() {
               </div>
             )}
 
-            {/* Prospects list */}
+            {/* Prospects list — mobile cards */}
             {selectedCampaign && prospects.length > 0 && (
-              <div className="card p-0 overflow-x-auto">
+              <div className="sm:hidden space-y-3">
+                {prospects.map((p) => (
+                  <div key={p.id} className="card p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-white font-medium truncate">{p.name || '—'}</p>
+                        <p className="text-gray-400 text-xs break-all">{p.email}</p>
+                        {p.company && <p className="text-gray-500 text-xs truncate">{p.company}</p>}
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${
+                        p.unsubscribed ? 'bg-red-500/20 text-red-400' :
+                        p.status === 'new' ? 'bg-gray-700 text-gray-400' :
+                        'bg-brand-indigo/20 text-brand-indigo-light'
+                      }`}>{p.unsubscribed ? 'Unsub' : p.status}</span>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 pt-2 border-t border-gray-700/50 text-xs">
+                      <span className="bg-brand-indigo/20 text-brand-indigo-light px-2 py-0.5 rounded-full">Step {p.sequence_step}/3</span>
+                      <span className="text-brand-cyan font-medium">{p.opened_count} opens</span>
+                      <span className="text-green-400 font-medium">{p.clicked_count} clicks</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Prospects list — desktop table */}
+            {selectedCampaign && prospects.length > 0 && (
+              <div className="hidden sm:block card p-0 overflow-x-auto">
                 <table className="w-full text-sm min-w-[700px]">
                   <thead>
                     <tr className="border-b border-gray-700">

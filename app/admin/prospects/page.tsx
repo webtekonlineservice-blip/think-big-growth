@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
-import Link from 'next/link'
 
 interface Prospect {
   id: string
@@ -55,10 +54,10 @@ export default function ProspectsBoard() {
 
   const fetchData = useCallback(async () => {
     const [campRes, prospRes, enrichRes, catRes] = await Promise.all([
-      fetch('/api/prospects/campaigns'),
-      fetch('/api/prospects?limit=100'),
-      fetch('/api/prospects/enrich'),
-      fetch('/api/categories'),
+      fetch('/api/prospects/campaigns', { credentials: 'include' }),
+      fetch('/api/prospects?limit=100', { credentials: 'include' }),
+      fetch('/api/prospects/enrich', { credentials: 'include' }),
+      fetch('/api/categories', { credentials: 'include' }),
     ])
     if (campRes.ok) {
       const c = await campRes.json()
@@ -96,7 +95,7 @@ export default function ProspectsBoard() {
   // Fetch prospects when campaign changes
   useEffect(() => {
     if (!selectedCampaign) return
-    fetch(`/api/prospects?campaign_id=${selectedCampaign}&limit=200`)
+    fetch(`/api/prospects?campaign_id=${selectedCampaign}&limit=200`, { credentials: 'include' })
       .then(async (res) => {
         if (res.ok) {
           const d = await res.json()
@@ -145,6 +144,7 @@ export default function ProspectsBoard() {
     }))
     const res = await fetch('/api/prospects', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ campaign_id: selectedCampaign, prospects: normalized }),
     })
@@ -153,7 +153,7 @@ export default function ProspectsBoard() {
       setImportResult({ imported: data.imported, skipped: data.skipped })
       setCsvData([])
       // Refresh prospects
-      const r = await fetch(`/api/prospects?campaign_id=${selectedCampaign}&limit=200`)
+      const r = await fetch(`/api/prospects?campaign_id=${selectedCampaign}&limit=200`, { credentials: 'include' })
       if (r.ok) setProspects((await r.json()).prospects)
     }
     setImporting(false)
@@ -172,6 +172,7 @@ export default function ProspectsBoard() {
     // Update in DB
     await fetch(`/api/prospects/${draggedId}`, {
       method: 'PATCH',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profession: targetCategory }),
     })
@@ -183,6 +184,7 @@ export default function ProspectsBoard() {
     setEnrichResult(null)
     const res = await fetch('/api/prospects/enrich', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ campaign_id: selectedCampaign || undefined, limit: 50 }),
     })
@@ -190,9 +192,9 @@ export default function ProspectsBoard() {
       const data = await res.json()
       setEnrichResult(data)
       // Refresh prospects
-      const r = await fetch(`/api/prospects?campaign_id=${selectedCampaign}&limit=200`)
+      const r = await fetch(`/api/prospects?campaign_id=${selectedCampaign}&limit=200`, { credentials: 'include' })
       if (r.ok) setProspects((await r.json()).prospects)
-      const er = await fetch('/api/prospects/enrich')
+      const er = await fetch('/api/prospects/enrich', { credentials: 'include' })
       if (er.ok) setEnrichStats(await er.json())
     }
     setEnriching(false)
@@ -200,7 +202,7 @@ export default function ProspectsBoard() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Remove this prospect?')) return
-    const res = await fetch(`/api/prospects/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/prospects/${id}`, { method: 'DELETE', credentials: 'include' })
     if (res.ok) setProspects((prev) => prev.filter((p) => p.id !== id))
   }
 
@@ -209,13 +211,14 @@ export default function ProspectsBoard() {
     setCreatingCampaign(profession)
     const res = await fetch('/api/prospects/campaigns', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profession }),
     })
     if (res.ok) {
       const camp = await res.json()
       // Refresh campaigns and switch to the new one
-      const cr = await fetch('/api/prospects/campaigns')
+      const cr = await fetch('/api/prospects/campaigns', { credentials: 'include' })
       if (cr.ok) setCampaigns(await cr.json())
       setSelectedCampaign(camp.id)
       alert(`Campaign "${camp.name}" created with ${camp.sequence_count} emails. Now assign prospects to it.`)
@@ -237,24 +240,24 @@ export default function ProspectsBoard() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-white">Prospect Board</h1>
           <p className="text-xs text-gray-500">Organize, categorize, and manage scraped leads</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <select
             value={selectedCampaign}
             onChange={(e) => setSelectedCampaign(e.target.value)}
-            className="input-field text-sm py-2 w-56"
+            className="input-field text-sm py-2 flex-1 sm:flex-none sm:w-56 min-w-0"
           >
             {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.total_prospects})</option>)}
           </select>
           <button
             onClick={() => setView(view === 'board' ? 'list' : 'board')}
-            className="btn-ghost text-xs px-3 py-2"
+            className="btn-ghost text-xs px-3 py-2 shrink-0 whitespace-nowrap"
           >
             {view === 'board' ? '☰ List' : '▦ Board'}
           </button>
@@ -263,8 +266,8 @@ export default function ProspectsBoard() {
 
       {/* Stats + Enrich bar */}
       {enrichStats && (
-        <div className="flex items-center gap-4 p-4 bg-gray-900/60 border border-gray-700/50 rounded-xl">
-          <div className="flex items-center gap-6 flex-1 text-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 bg-gray-900/60 border border-gray-700/50 rounded-xl">
+          <div className="flex items-center gap-4 sm:gap-6 flex-1 text-sm flex-wrap">
             <div>
               <span className="text-gray-400">Total: </span>
               <span className="text-white font-semibold">{enrichStats.total}</span>
@@ -294,7 +297,7 @@ export default function ProspectsBoard() {
           <button
             onClick={handleEnrich}
             disabled={enriching || enrichStats.needsEnrichment === 0}
-            className="btn-primary text-xs px-4 py-2 disabled:opacity-50 flex items-center gap-2"
+            className="btn-primary text-xs px-4 py-2 disabled:opacity-50 flex items-center justify-center gap-2 shrink-0 w-full sm:w-auto"
           >
             {enriching ? (
               <>
@@ -323,20 +326,20 @@ export default function ProspectsBoard() {
       )}
 
       {/* Search + CSV import */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name, company, profession..."
-          className="input-field text-sm py-2 flex-1 max-w-md"
+          className="input-field text-sm py-2 flex-1 min-w-0 sm:max-w-md"
         />
-        <label className="btn-secondary text-xs px-4 py-2 cursor-pointer">
+        <label className="btn-secondary text-xs px-4 py-2 cursor-pointer shrink-0 whitespace-nowrap">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
           Import CSV
           <input type="file" accept=".csv" onChange={handleCSVUpload} className="hidden" />
         </label>
-        <span className="text-xs text-gray-500">{prospects.length} total</span>
+        <span className="text-xs text-gray-500 shrink-0">{prospects.length} total</span>
       </div>
 
       {/* CSV preview */}
@@ -362,7 +365,7 @@ export default function ProspectsBoard() {
           {categories.map((cat) => (
             <div
               key={cat.name}
-              className="flex-shrink-0 w-72 bg-gray-900/60 border border-gray-700/50 rounded-xl overflow-hidden"
+              className="flex-shrink-0 w-[85vw] max-w-72 sm:w-72 bg-gray-900/60 border border-gray-700/50 rounded-xl overflow-hidden"
               onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-brand-red/50') }}
               onDragLeave={(e) => { e.currentTarget.classList.remove('border-brand-red/50') }}
               onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-brand-red/50'); handleDrop(cat.name) }}
@@ -437,7 +440,32 @@ export default function ProspectsBoard() {
         </div>
       ) : (
         /* List view */
-        <div className="card p-0 overflow-x-auto">
+        <>
+        {/* Mobile card list */}
+        <div className="sm:hidden space-y-3">
+          {prospects.filter((p) => {
+            if (!search) return true
+            const q = search.toLowerCase()
+            return p.name.toLowerCase().includes(q) || p.company.toLowerCase().includes(q) || p.profession.toLowerCase().includes(q)
+          }).map((p) => (
+            <div key={p.id} className="card p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-white font-medium truncate">{p.name || '—'}</p>
+                  {p.company && <p className="text-gray-400 text-xs truncate">{p.company}</p>}
+                </div>
+                <button onClick={() => handleDelete(p.id)} className="text-xs text-red-400 hover:text-red-300 shrink-0">Remove</button>
+              </div>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <span className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded-full">{p.profession || 'Uncategorized'}</span>
+                <span className="text-xs bg-brand-indigo/20 text-brand-indigo-light px-2 py-0.5 rounded-full">{p.status}</span>
+                {p.phone && <span className="text-xs text-gray-500">{p.phone}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden sm:block card p-0 overflow-x-auto">
           <table className="w-full text-sm min-w-[700px]">
             <thead>
               <tr className="border-b border-gray-700">
@@ -470,6 +498,7 @@ export default function ProspectsBoard() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   )
