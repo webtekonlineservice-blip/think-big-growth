@@ -42,6 +42,8 @@ export async function GET(req: NextRequest) {
         clicked_count: p.clicked_count,
         unsubscribed: p.unsubscribed,
         last_sent_at: p.last_sent_at?.toISOString() ?? null,
+        ai_score: p.ai_score ?? 0,
+        ai_first_line: p.ai_first_line ?? '',
         created_at: p.created_at.toISOString(),
       })),
       total,
@@ -90,6 +92,7 @@ export async function POST(req: NextRequest) {
       const token = crypto.randomBytes(24).toString('hex')
 
       try {
+      const p2 = p as typeof p & { ai_score?: number; ai_first_line?: string }
         await Prospect.create({
           name,
           email: email || `noemail_${token.slice(0, 8)}@placeholder.local`,
@@ -100,6 +103,8 @@ export async function POST(req: NextRequest) {
           source: p.source?.trim() ?? 'extension',
           campaign_id,
           unsubscribe_token: token,
+          ai_score: typeof p2.ai_score === 'number' ? p2.ai_score : 0,
+          ai_first_line: p2.ai_first_line?.trim() ?? '',
         })
         imported++
       } catch (err: unknown) {

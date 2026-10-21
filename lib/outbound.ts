@@ -121,9 +121,13 @@ export async function runOutbound(options: RunOutboundOptions = {}): Promise<Run
         if (daysSinceLast < stepConfig.delay_days) continue
       }
 
-      // Build email content
+      // Build email content — inject AI-personalized first line into step 1 if available
       const subject = replacePlaceholders(stepConfig.subject, prospect)
-      const body = replacePlaceholders(stepConfig.body, prospect)
+      let body = replacePlaceholders(stepConfig.body, prospect)
+      if (nextStep === 1 && prospect.ai_first_line && prospect.ai_first_line.trim()) {
+        // Prepend the AI-written opening line before the first paragraph
+        body = `${prospect.ai_first_line.trim()}\n\n${body}`
+      }
 
       // Build tracked CTA URL
       const ctaUrl = stepConfig.cta_url

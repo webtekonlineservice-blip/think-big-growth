@@ -6,12 +6,13 @@ import Link from 'next/link'
 import Image from 'next/image'
 import {
   LayoutDashboard, Users, UserCircle, Send, Mail,
-  FlaskConical, BarChart3, ScrollText, Target, LogOut, Menu, Megaphone, CheckSquare, Wallet, Radio, TrendingUp,
+  FlaskConical, BarChart3, ScrollText, Target, LogOut, Menu, Megaphone, CheckSquare, Wallet, Radio, TrendingUp, Zap,
 } from 'lucide-react'
 
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/admin', Icon: LayoutDashboard },
   { label: 'Growth Advisor', href: '/admin/growth', Icon: TrendingUp },
+  { label: 'Lead Engine', href: '/admin/lead-engine', Icon: Zap },
   { label: 'Visitors', href: '/admin/visitors', Icon: Users },
   { label: 'Members', href: '/admin/members', Icon: UserCircle },
   { label: 'Treasurer', href: '/admin/treasurer', Icon: Wallet },

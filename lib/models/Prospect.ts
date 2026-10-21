@@ -9,7 +9,7 @@ export interface IProspect extends Document {
   profession: string
   phone: string
   website: string
-  source: string                    // e.g. 'google_maps', 'yelp', 'csv_import'
+  source: string                    // e.g. 'google_maps', 'yelp', 'csv_import', 'google_places'
   campaign_id: Types.ObjectId | null
   status: ProspectStatus
   unsubscribed: boolean
@@ -18,6 +18,8 @@ export interface IProspect extends Document {
   last_sent_at: Date | null
   opened_count: number
   clicked_count: number
+  ai_score: number                  // 1–10 fit score from DeepSeek (0 = not scored)
+  ai_first_line: string             // AI-personalized opening line for email 1
   created_at: Date
 }
 
@@ -42,6 +44,8 @@ const ProspectSchema = new Schema<IProspect>(
     last_sent_at: { type: Date, default: null },
     opened_count: { type: Number, default: 0 },
     clicked_count: { type: Number, default: 0 },
+    ai_score: { type: Number, default: 0 },
+    ai_first_line: { type: String, default: '' },
     created_at: { type: Date, default: Date.now },
   },
   { timestamps: false }

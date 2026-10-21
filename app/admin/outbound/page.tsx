@@ -31,6 +31,8 @@ interface ProspectRow {
   opened_count: number
   clicked_count: number
   unsubscribed: boolean
+  ai_score: number
+  ai_first_line: string
 }
 
 // Default 3-email sequence for new campaigns
@@ -440,6 +442,13 @@ export default function AdminOutboundPage() {
                     </div>
                     <div className="flex items-center gap-4 mt-2 pt-2 border-t border-gray-700/50 text-xs">
                       <span className="bg-brand-indigo/20 text-brand-indigo-light px-2 py-0.5 rounded-full">Step {p.sequence_step}/3</span>
+                      {p.ai_score > 0 && (
+                        <span className={`font-bold px-1.5 py-0.5 rounded ${
+                          p.ai_score >= 8 ? 'bg-green-500/20 text-green-400' :
+                          p.ai_score >= 5 ? 'bg-yellow-500/20 text-yellow-400' :
+                          'bg-gray-700 text-gray-500'
+                        }`}>{p.ai_score}/10</span>
+                      )}
                       <span className="text-brand-cyan font-medium">{p.opened_count} opens</span>
                       <span className="text-green-400 font-medium">{p.clicked_count} clicks</span>
                     </div>
@@ -454,7 +463,7 @@ export default function AdminOutboundPage() {
                 <table className="w-full text-sm min-w-[700px]">
                   <thead>
                     <tr className="border-b border-gray-700">
-                      {['Name', 'Email', 'Company', 'Step', 'Opens', 'Clicks', 'Status'].map((h) => (
+                      {['Name', 'Email', 'Company', 'Step', 'Score', 'Opens', 'Clicks', 'Status'].map((h) => (
                         <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 first:pl-6">{h}</th>
                       ))}
                     </tr>
@@ -467,6 +476,15 @@ export default function AdminOutboundPage() {
                         <td className="px-4 py-3 text-gray-400">{p.company || '—'}</td>
                         <td className="px-4 py-3">
                           <span className="text-xs bg-brand-indigo/20 text-brand-indigo-light px-2 py-0.5 rounded-full">{p.sequence_step}/3</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {p.ai_score > 0 && (
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                              p.ai_score >= 8 ? 'bg-green-500/20 text-green-400' :
+                              p.ai_score >= 5 ? 'bg-yellow-500/20 text-yellow-400' :
+                              'bg-gray-700 text-gray-500'
+                            }`}>{p.ai_score}/10</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-brand-cyan font-medium">{p.opened_count}</td>
                         <td className="px-4 py-3 text-green-400 font-medium">{p.clicked_count}</td>
