@@ -18,7 +18,6 @@ const NAV_ITEMS = [
   { label: 'Treasurer', href: '/admin/treasurer', Icon: Wallet },
   { label: 'Marketing', href: '/admin/marketing', Icon: Radio },
   { label: 'Seats', href: '/admin/seats', Icon: CheckSquare },
-  { label: 'Prospects', href: '/admin/prospects', Icon: Target },
   { label: 'Outbound', href: '/admin/outbound', Icon: Send },
   { label: 'Campaigns', href: '/admin/campaigns', Icon: Mail },
   { label: 'Announce', href: '/admin/announce', Icon: Megaphone },
