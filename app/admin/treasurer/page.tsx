@@ -550,25 +550,37 @@ function PaymentForm({ members, ledger, onDone, onCancel }: { members: Member[];
     if (!canSubmit) return
     setSaving(true)
     const amount = parseFloat(form.amount)
-    await fetch('/api/treasurer/ledger', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        member_id: who === 'member' ? form.member_id : null,
-        member_name: payerName,
-        type: 'payment', amount, date: form.date,
-        description: who === 'member' ? 'Payment / Prepay' : 'Visitor Payment',
-        status: 'paid', notes: form.notes,
-      }),
-    })
-    await fetch('/api/treasurer/transactions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        type: 'income',
-        category: who === 'member' ? 'Member Payment' : 'Guest Fee',
-        description: `${who === 'member' ? 'Payment' : 'Visitor payment'} from ${payerName}`,
-        amount, date: form.date,
-      }),
-    })
+    try {
+      const res = await fetch('/api/treasurer/ledger', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          member_id: who === 'member' ? form.member_id : null,
+          member_name: payerName,
+          type: 'payment', amount, date: form.date,
+          description: who === 'member' ? 'Payment / Prepay' : 'Visitor Payment',
+          status: 'paid', notes: form.notes,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(`Payment failed: ${d.error || res.status}`)
+        setSaving(false)
+        return
+      }
+      await fetch('/api/treasurer/transactions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'income',
+          category: who === 'member' ? 'Member Payment' : 'Guest Fee',
+          description: `${who === 'member' ? 'Payment' : 'Visitor payment'} from ${payerName}`,
+          amount, date: form.date,
+        }),
+      })
+    } catch (e) {
+      alert(`Network error saving payment: ${String(e)}`)
+      setSaving(false)
+      return
+    }
     setSaving(false)
     await onDone()
   }
