@@ -139,7 +139,8 @@ function memberBalance(ledger: LedgerEntry[], name: string) {
 }
 
 function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Member[]; ledger: LedgerEntry[]; refresh: () => Promise<void>; startingBalance: number }) {
-  const [mode, setMode] = useState<null | 'weekly' | 'payment'>(null)
+  const [modal, setModal] = useState<null | 'lunch' | 'pay'>(null)
+  const [payTarget, setPayTarget] = useState<{ id: string; name: string; balance: number } | null>(null)
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [editingEntry, setEditingEntry] = useState<LedgerEntry | null>(null)
@@ -175,6 +176,12 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
     await refresh()
   }
 
+  const openPay = (m: Member) => {
+    const { balance } = memberBalance(ledger, m.name)
+    setPayTarget({ id: m.id, name: m.name, balance })
+    setModal('pay')
+  }
+
   return (
     <div className="space-y-4">
       {/* Summary cards */}
@@ -185,23 +192,14 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
         <StatCard label="Members Owing" value={String(membersOwing)} accent="border-orange-500" color="text-orange-400" />
       </div>
 
-      {/* Controls */}
+      {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search member…"
           className={`${INPUT} max-w-48`} />
-        <div className="flex gap-2">
-          <button onClick={() => setMode(mode === 'weekly' ? null : 'weekly')} className={BTN_PRIMARY}>
-            <DollarSign className="w-4 h-4" /> Weekly Bill
-          </button>
-          <button onClick={() => setMode(mode === 'payment' ? null : 'payment')}
-            className="flex items-center gap-1.5 border border-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition">
-            <Plus className="w-4 h-4" /> Payment
-          </button>
-        </div>
+        <button onClick={() => setModal('lunch')} className={BTN_PRIMARY}>
+          <DollarSign className="w-4 h-4" /> Thursday Lunch
+        </button>
       </div>
-
-      {mode === 'weekly' && <WeeklyBillForm members={members} onDone={async () => { setMode(null); await refresh() }} onCancel={() => setMode(null)} />}
-      {mode === 'payment' && <PaymentForm members={members} ledger={ledger} onDone={async () => { setMode(null); await refresh() }} onCancel={() => setMode(null)} />}
 
       {/* Member rows */}
       <div className="space-y-2">
@@ -213,10 +211,10 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
           const statusLabel = !hasActivity ? 'No activity' : balance > 0 ? `Owes ${money(balance)}` : balance < 0 ? `Credit ${money(Math.abs(balance))}` : 'Paid Up'
           return (
             <div key={m.id} className={CARD + ' overflow-hidden'}>
-              <button onClick={() => setExpanded(open ? null : m.id)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-800/40 transition text-left">
-                <div className="flex items-center gap-3">
-                  {/* Avatar — photo or styled initials */}
-                  <div className={`relative w-11 h-11 rounded-full shrink-0 overflow-hidden border-2 ${!hasActivity ? 'border-gray-700' : balance > 0 ? 'border-red-500/60' : balance < 0 ? 'border-brand-blue/60' : 'border-green-500/60'}`}>
+              <div className="flex items-center px-4 py-3 gap-3">
+                {/* Avatar */}
+                <button onClick={() => setExpanded(open ? null : m.id)} className="shrink-0">
+                  <div className={`w-11 h-11 rounded-full overflow-hidden border-2 ${!hasActivity ? 'border-gray-700' : balance > 0 ? 'border-red-500/60' : balance < 0 ? 'border-brand-blue/60' : 'border-green-500/60'}`}>
                     {m.photo
                       ? <img src={m.photo} alt={m.name} className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-xs font-bold text-white" style={{ background: 'linear-gradient(135deg,#D81F2E,#9b1020)' }}>
@@ -224,24 +222,44 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
                         </div>
                     }
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-white">{m.name}</p>
-                    <p className="text-xs text-gray-500">{m.company || ''}{m.company && entries.length > 0 ? ' · ' : ''}{entries.length > 0 ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}` : 'No entries'}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right hidden sm:block"><p className="text-xs text-gray-500">Paid</p><p className="text-sm text-green-400">{money(paid)}</p></div>
-                  <div className="text-right"><p className="text-xs text-gray-500">Balance</p><p className={`text-sm font-bold ${statusColor}`}>{statusLabel}</p></div>
+                </button>
+
+                {/* Name + entries */}
+                <button onClick={() => setExpanded(open ? null : m.id)} className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-semibold text-white">{m.name}</p>
+                  <p className="text-xs text-gray-500">{m.company || ''}{m.company && entries.length > 0 ? ' · ' : ''}{entries.length > 0 ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}` : 'No entries'}</p>
+                </button>
+
+                {/* Balance */}
+                <button onClick={() => setExpanded(open ? null : m.id)} className="text-right shrink-0 hidden sm:block">
+                  <p className="text-xs text-gray-500">Paid</p>
+                  <p className="text-sm text-green-400">{money(paid)}</p>
+                </button>
+                <button onClick={() => setExpanded(open ? null : m.id)} className="text-right shrink-0">
+                  <p className="text-xs text-gray-500">Balance</p>
+                  <p className={`text-sm font-bold ${statusColor}`}>{statusLabel}</p>
+                </button>
+
+                {/* Pay button — only shown if they owe money */}
+                {balance > 0 && (
+                  <button
+                    onClick={() => openPay(m)}
+                    className="shrink-0 bg-green-600 hover:bg-green-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition whitespace-nowrap">
+                    Pay
+                  </button>
+                )}
+
+                <button onClick={() => setExpanded(open ? null : m.id)}>
                   {open ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
-                </div>
-              </button>
+                </button>
+              </div>
+
               {open && (
                 <div className="border-t border-gray-700 divide-y divide-gray-700/50">
                   {entries.length === 0 ? <p className="text-xs text-gray-500 px-4 py-3">No entries.</p> :
                     entries.sort((a, b) => (a.date > b.date ? -1 : 1)).map((e) => (
                       <div key={e.id}>
                         {editingEntry?.id === e.id ? (
-                          /* ── Inline entry edit ── */
                           <div className="px-4 py-3 space-y-2 bg-gray-900/60">
                             <div className="grid grid-cols-2 gap-2">
                               <div><label className="block text-xs text-gray-500 mb-1">Description</label>
@@ -258,9 +276,6 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
                                   {['unpaid', 'paid', 'waived'].map((s) => <option key={s}>{s}</option>)}
                                 </select>
                               </div>
-                              <div><label className="block text-xs text-gray-500 mb-1">Dish (reference)</label>
-                                <input value={entryForm.item} onChange={(ev) => setEntryForm((f) => ({ ...f, item: ev.target.value }))} placeholder="e.g. Bison Burger" className={INPUT} />
-                              </div>
                               <div><label className="block text-xs text-gray-500 mb-1">Notes</label>
                                 <input value={entryForm.notes} onChange={(ev) => setEntryForm((f) => ({ ...f, notes: ev.target.value }))} className={INPUT} />
                               </div>
@@ -271,7 +286,6 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
                             </div>
                           </div>
                         ) : (
-                          /* ── Normal entry row ── */
                           <div className="flex items-center justify-between px-4 py-2.5 gap-3">
                             <div className="flex-1 min-w-0">
                               <p className="text-sm text-gray-200">{e.description}{e.item ? ` — ${e.item}` : ''}</p>
@@ -297,324 +311,287 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
           )
         })}
       </div>
-    </div>
-  )
-}
 
-type VisitorRow = { id: string; name: string; amount: string; item: string }
-type ReceiptItem = { name: string; price?: number }
-
-function WeeklyBillForm({ members, onDone, onCancel }: { members: Member[]; onDone: () => Promise<void>; onCancel: () => void }) {
-  const [date, setDate] = useState(today())
-  const [duesAmount, setDuesAmount] = useState(String(WEEKLY_DUES))
-  const [lunchPrice, setLunchPrice] = useState(String(LUNCH_PRICE))
-  // Who ate (→ $24 flat). Everyone else owes the $4 dues.
-  const [ate, setAte] = useState<Record<string, boolean>>({})
-  // Reference-only dish per member (shown at payment time).
-  const [dish, setDish] = useState<Record<string, string>>({})
-  const [visitors, setVisitors] = useState<VisitorRow[]>([])
-  // Chapter food expense — editable, defaults to the receipt total.
-  const [foodExpense, setFoodExpense] = useState('')
-  // 50/50 raffle
-  const [raffleIn, setRaffleIn] = useState('')
-  const [raffleOut, setRaffleOut] = useState('')
-  const [saving, setSaving] = useState(false)
-  // Receipt paste
-  const [showReceipt, setShowReceipt] = useState(false)
-  const [receiptText, setReceiptText] = useState('')
-  const [parsing, setParsing] = useState(false)
-  const [receiptItems, setReceiptItems] = useState<ReceiptItem[]>([])
-  const [receiptMsg, setReceiptMsg] = useState('')
-
-  const eaters = members.filter((m) => ate[m.id])
-  const allAte = members.length > 0 && members.every((m) => ate[m.id])
-  const price = parseFloat(lunchPrice) || 0
-  const dues = parseFloat(duesAmount) || 0
-
-  const lunchCharged = eaters.length * price
-  const duesCharged = (members.length - eaters.length) * dues
-  const memberChargeTotal = lunchCharged + duesCharged
-  // Dues owed by the whole chapter this week ($4 each regardless of eating).
-  const weeklyDuesOwed = members.length * dues
-
-  const validVisitors = visitors.filter((v) => v.name.trim() && parseFloat(v.amount) > 0)
-  const visitorTotal = validVisitors.reduce((s, v) => s + parseFloat(v.amount), 0)
-
-  const raffleInNum = parseFloat(raffleIn) || 0
-  const raffleOutNum = parseFloat(raffleOut) || 0
-  const foodExpenseNum = parseFloat(foodExpense) || 0
-
-  const canSubmit = members.length > 0 || validVisitors.length > 0 || raffleInNum > 0 || raffleOutNum > 0 || foodExpenseNum > 0
-
-  const addVisitor = () => setVisitors((v) => [...v, { id: Math.random().toString(36).slice(2), name: '', amount: String(LUNCH_PRICE), item: '' }])
-  const updateVisitor = (id: string, patch: Partial<VisitorRow>) => setVisitors((v) => v.map((r) => (r.id === id ? { ...r, ...patch } : r)))
-  const removeVisitor = (id: string) => setVisitors((v) => v.filter((r) => r.id !== id))
-
-  const parseReceiptText = async () => {
-    if (!receiptText.trim()) return
-    setParsing(true); setReceiptMsg('')
-    try {
-      const res = await fetch('/api/treasurer/receipt', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: receiptText }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setReceiptMsg(data.error || 'Could not parse receipt.'); return }
-      if (data.date) setDate(data.date)
-      if (data.total) setFoodExpense(String(data.total))
-      setReceiptItems(Array.isArray(data.items) ? data.items : [])
-      const warn = Array.isArray(data.warnings) && data.warnings.length ? ' ⚠️ ' + data.warnings.join(' ') : ''
-      setReceiptMsg(`Pulled total ${data.total ? money(data.total) : '—'} and ${data.items?.length ?? 0} items.${warn} Confirm the date & total below.`)
-      setShowReceipt(false)
-    } catch {
-      setReceiptMsg('Receipt parsing failed. Enter the total manually below.')
-    } finally {
-      setParsing(false)
-    }
-  }
-
-  const submit = async () => {
-    if (!canSubmit) return
-    setSaving(true)
-
-    // 1) One charge per member ($24 eater incl. dues, else $4), plus visitors.
-    if (members.length > 0 || validVisitors.length > 0) {
-      await fetch('/api/treasurer/ledger', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          weeklyBill: {
-            date, dues, lunchPrice: price,
-            members: members.map((m) => ({ member_id: m.id, member_name: m.name, ate: !!ate[m.id], item: dish[m.id] || '' })),
-            visitors: validVisitors.map((v) => ({ name: v.name.trim(), amount: parseFloat(v.amount), item: v.item.trim() })),
-          },
-        }),
-      })
-    }
-
-    // 2) Chapter food expense (receipt total — what the chapter pays the venue)
-    if (foodExpenseNum > 0) {
-      await fetch('/api/treasurer/transactions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'expense', category: 'Weekly Lunch',
-          description: `Weekly lunch — ${date} (${eaters.length} ate)`,
-          amount: foodExpenseNum, date,
-        }),
-      })
-    }
-
-    // 3) 50/50 raffle
-    if (raffleInNum > 0) {
-      await fetch('/api/treasurer/transactions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'income', category: '50/50 Collected', description: `50/50 raffle collected — ${date}`, amount: raffleInNum, date }),
-      })
-    }
-    if (raffleOutNum > 0) {
-      await fetch('/api/treasurer/transactions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'expense', category: '50/50 Payout', description: `50/50 raffle paid out — ${date}`, amount: raffleOutNum, date }),
-      })
-    }
-
-    setSaving(false)
-    await onDone()
-  }
-
-  return (
-    <div className={CARD + ' p-4 space-y-4'}>
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Weekly Meeting Entry</h3>
-        <button onClick={() => setShowReceipt((v) => !v)} className="text-xs text-brand-blue hover:underline">{showReceipt ? 'Hide receipt' : 'Paste receipt'}</button>
-      </div>
-
-      {/* Receipt paste helper */}
-      {showReceipt && (
-        <div className="rounded-lg border border-gray-700 bg-gray-900 p-3 space-y-2">
-          <p className="text-xs text-gray-500">Paste the lunch receipt — AI pulls the date, total, and item list. You confirm before posting.</p>
-          <textarea value={receiptText} onChange={(e) => setReceiptText(e.target.value)} rows={5} placeholder="Paste Toast receipt text here…" className={`${INPUT} font-mono text-xs`} />
-          <button onClick={parseReceiptText} disabled={parsing || !receiptText.trim()} className={BTN_PRIMARY}>
-            {parsing ? <><Loader2 className="w-4 h-4 animate-spin" /> Parsing…</> : 'Parse Receipt'}
-          </button>
-        </div>
+      {/* ── Lunch Modal ── */}
+      {modal === 'lunch' && (
+        <LunchModal
+          members={members}
+          onDone={async () => { setModal(null); await refresh() }}
+          onClose={() => setModal(null)}
+        />
       )}
-      {receiptMsg && <p className="text-xs text-yellow-400">{receiptMsg}</p>}
 
-      <div className="flex flex-wrap gap-3 items-end">
-        <div><label className="block text-xs text-gray-500 mb-1">Meeting Date</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} onClick={(e) => e.currentTarget.showPicker?.()} className={`${INPUT} cursor-pointer`} /></div>
-        <div><label className="block text-xs text-gray-500 mb-1">Ate ($/eater)</label><input type="number" step="0.01" value={lunchPrice} onChange={(e) => setLunchPrice(e.target.value)} className={`${INPUT} w-24`} /></div>
-        <div><label className="block text-xs text-gray-500 mb-1">Dues ($/non-eater)</label><input type="number" step="0.01" value={duesAmount} onChange={(e) => setDuesAmount(e.target.value)} className={`${INPUT} w-28`} /></div>
-        <div><label className="block text-xs text-gray-500 mb-1">Receipt total ($)</label><input type="number" step="0.01" value={foodExpense} onChange={(e) => setFoodExpense(e.target.value)} placeholder="121.35" className={`${INPUT} w-28`} /></div>
-      </div>
-
-      {/* Charge summary */}
-      <div className="flex flex-wrap gap-2 text-xs">
-        <span className="bg-green-500/10 border border-green-500/30 rounded-lg px-3 py-1.5">{eaters.length} ate → <span className="font-bold text-green-400">{money(lunchCharged)}</span></span>
-        <span className="bg-orange-500/10 border border-orange-500/30 rounded-lg px-3 py-1.5">{members.length - eaters.length} dues-only → <span className="font-bold text-orange-400">{money(duesCharged)}</span></span>
-        <span className="bg-brand-blue/10 border border-brand-blue/30 rounded-lg px-3 py-1.5">Member charges → <span className="font-bold text-brand-blue">{money(memberChargeTotal)}</span></span>
-      </div>
-
-      {/* Who ate — each eater can tag a dish from the receipt */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-gray-500">Who ate lunch? <span className="text-gray-600">(eaters charged {money(price)} flat · everyone else {money(dues)} dues)</span></span>
-          <button onClick={() => { if (allAte) { setAte({}) } else { setAte(Object.fromEntries(members.map((m) => [m.id, true]))) } }} className="text-xs text-brand-blue hover:underline">{allAte ? 'Clear All' : 'Select All'}</button>
-        </div>
-        <div className="space-y-1.5 max-h-72 overflow-y-auto">
-          {members.map((m) => {
-            const isEater = !!ate[m.id]
-            return (
-              <div key={m.id} className={`flex items-center gap-2 rounded-lg px-3 py-1.5 border text-sm ${isEater ? 'bg-green-500/10 border-green-500/30' : 'bg-gray-900 border-gray-700'}`}>
-                <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0">
-                  <input type="checkbox" checked={isEater} onChange={() => setAte((s) => ({ ...s, [m.id]: !s[m.id] }))} className="accent-green-500" />
-                  <span className={`truncate ${isEater ? 'text-gray-200' : 'text-gray-400'}`}>{m.name}</span>
-                </label>
-                <span className={`text-xs font-semibold ${isEater ? 'text-green-400' : 'text-orange-400'}`}>{money(isEater ? price : dues)}</span>
-                {isEater && (
-                  receiptItems.length > 0 ? (
-                    <select value={dish[m.id] ?? ''} onChange={(e) => setDish((d) => ({ ...d, [m.id]: e.target.value }))} className="bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-300 px-2 py-1 max-w-[11rem]">
-                      <option value="">— dish —</option>
-                      {receiptItems.map((it, i) => <option key={i} value={it.name}>{it.name}</option>)}
-                    </select>
-                  ) : (
-                    <input value={dish[m.id] ?? ''} onChange={(e) => setDish((d) => ({ ...d, [m.id]: e.target.value }))} placeholder="dish (optional)" className="bg-gray-800 border border-gray-700 rounded-md text-xs text-gray-300 px-2 py-1 w-32" />
-                  )
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Visitors who ate */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-gray-500">Visitors who ate {visitorTotal > 0 && <span className="text-gray-400">· {money(visitorTotal)}</span>}</span>
-          <button onClick={addVisitor} className="text-xs text-brand-blue hover:underline flex items-center gap-1"><Plus className="w-3 h-3" /> Add visitor</button>
-        </div>
-        {visitors.length === 0 ? (
-          <p className="text-xs text-gray-600">No visitors added.</p>
-        ) : (
-          <div className="space-y-2">
-            {visitors.map((v) => (
-              <div key={v.id} className="flex items-center gap-2">
-                <input value={v.name} onChange={(e) => updateVisitor(v.id, { name: e.target.value })} placeholder="Visitor name" className={`${INPUT} flex-1`} />
-                <input value={v.item} onChange={(e) => updateVisitor(v.id, { item: e.target.value })} placeholder="dish (optional)" className={`${INPUT} w-32`} />
-                <div className="flex items-center gap-1">
-                  <span className="text-xs text-gray-500">$</span>
-                  <input type="number" step="0.01" value={v.amount} onChange={(e) => updateVisitor(v.id, { amount: e.target.value })} placeholder="0.00" className={`${INPUT} w-24`} />
-                </div>
-                <button onClick={() => removeVisitor(v.id)} className="text-gray-600 hover:text-red-400 transition"><X className="w-4 h-4" /></button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 50/50 raffle */}
-      <div className="grid grid-cols-2 gap-3">
-        <div><label className="block text-xs text-gray-500 mb-1">50/50 Collected ($)</label><input type="number" step="0.01" value={raffleIn} onChange={(e) => setRaffleIn(e.target.value)} placeholder="0.00" className={INPUT} /></div>
-        <div><label className="block text-xs text-gray-500 mb-1">50/50 Paid out ($)</label><input type="number" step="0.01" value={raffleOut} onChange={(e) => setRaffleOut(e.target.value)} placeholder="0.00" className={INPUT} /></div>
-      </div>
-
-      <div className="flex gap-2">
-        <button onClick={submit} disabled={saving || !canSubmit} className={BTN_PRIMARY}>{saving ? 'Saving…' : 'Post Weekly Entry'}</button>
-        <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-800 transition">Cancel</button>
-      </div>
+      {/* ── Pay Modal ── */}
+      {modal === 'pay' && payTarget && (
+        <PayModal
+          name={payTarget.name}
+          memberId={payTarget.id}
+          balance={payTarget.balance}
+          onDone={async () => { setModal(null); setPayTarget(null); await refresh() }}
+          onClose={() => { setModal(null); setPayTarget(null) }}
+        />
+      )}
     </div>
   )
 }
 
-function PaymentForm({ members, ledger, onDone, onCancel }: { members: Member[]; ledger: LedgerEntry[]; onDone: () => Promise<void>; onCancel: () => void }) {
-  const [who, setWho] = useState<'member' | 'visitor'>('member')
-  const [form, setForm] = useState({ member_id: '', visitorName: '', date: today(), amount: '', notes: '' })
+// ─── Lunch Modal ─────────────────────────────────────────────────────────────
+// Tap members/guests who got lunch → posts $24 charge each to ledger.
+function LunchModal({ members, onDone, onClose }: { members: Member[]; onDone: () => Promise<void>; onClose: () => void }) {
+  const [date, setDate] = useState(today())
+  const [checked, setChecked] = useState<Record<string, boolean>>({})
+  const [guests, setGuests] = useState<{ id: string; name: string }[]>([])
+  const [newGuest, setNewGuest] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-  // Visitor names seen on the ledger (charges with no member link), newest first.
-  const visitorNames = Array.from(
-    new Map(
-      ledger
-        .filter((e) => e.member_id === null && e.type === 'charge')
-        .sort((a, b) => (a.date < b.date ? 1 : -1))
-        .map((e) => [e.member_name, true])
-    ).keys()
-  )
+  const toggle = (id: string) => setChecked((s) => ({ ...s, [id]: !s[id] }))
 
-  const payerName = who === 'member'
-    ? members.find((m) => m.id === form.member_id)?.name
-    : form.visitorName.trim()
+  const addGuest = () => {
+    const name = newGuest.trim()
+    if (!name) return
+    setGuests((g) => [...g, { id: Math.random().toString(36).slice(2), name }])
+    setNewGuest('')
+  }
 
-  const canSubmit = !!payerName && !!form.amount && !isNaN(parseFloat(form.amount))
+  const checkedMembers = members.filter((m) => checked[m.id])
+  const total = (checkedMembers.length + guests.length) * LUNCH_PRICE
 
   const submit = async () => {
-    if (!canSubmit) return
-    setSaving(true)
-    const amount = parseFloat(form.amount)
+    if (checkedMembers.length === 0 && guests.length === 0) return
+    setSaving(true); setError('')
     try {
       const res = await fetch('/api/treasurer/ledger', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          member_id: who === 'member' ? form.member_id : null,
-          member_name: payerName,
-          type: 'payment', amount, date: form.date,
-          description: who === 'member' ? 'Payment / Prepay' : 'Visitor Payment',
-          status: 'paid', notes: form.notes,
+          weeklyBill: {
+            date,
+            dues: WEEKLY_DUES,
+            lunchPrice: LUNCH_PRICE,
+            members: members.map((m) => ({ member_id: m.id, member_name: m.name, ate: !!checked[m.id] })),
+            visitors: guests.map((g) => ({ name: g.name, amount: LUNCH_PRICE })),
+          },
         }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        alert(`Payment failed: ${d.error || res.status}`)
-        setSaving(false)
-        return
+        setError(d.error || 'Failed to post charges.')
+        setSaving(false); return
       }
-      await fetch('/api/treasurer/transactions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'income',
-          category: who === 'member' ? 'Member Payment' : 'Guest Fee',
-          description: `${who === 'member' ? 'Payment' : 'Visitor payment'} from ${payerName}`,
-          amount, date: form.date,
-        }),
-      })
-    } catch (e) {
-      alert(`Network error saving payment: ${String(e)}`)
-      setSaving(false)
-      return
-    }
+    } catch { setError('Network error.'); setSaving(false); return }
     setSaving(false)
     await onDone()
   }
 
   return (
-    <div className={CARD + ' p-4 space-y-4'}>
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Record {who === 'member' ? 'Member' : 'Visitor'} Payment</h3>
-        <div className="flex rounded-lg overflow-hidden border border-gray-700">
-          {(['member', 'visitor'] as const).map((w) => (
-            <button key={w} onClick={() => setWho(w)} className={`px-3 py-1.5 text-xs font-medium capitalize transition ${who === w ? 'bg-brand-blue text-white' : 'bg-gray-900 text-gray-500 hover:text-gray-300'}`}>{w}</button>
-          ))}
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 px-0 sm:px-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700 shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-white">Thursday Lunch</h2>
+            <p className="text-xs text-gray-500 mt-0.5">${LUNCH_PRICE} per person · tap to select</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              onClick={(e) => e.currentTarget.showPicker?.()}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-xs text-gray-200 focus:outline-none cursor-pointer" />
+            <button onClick={onClose} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+          </div>
+        </div>
+
+        {/* Member grid — scrollable */}
+        <div className="overflow-y-auto flex-1 px-4 py-3">
+          <div className="grid grid-cols-2 gap-2">
+            {members.map((m) => {
+              const on = !!checked[m.id]
+              return (
+                <button key={m.id} onClick={() => toggle(m.id)}
+                  className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border transition-all text-left ${
+                    on ? 'bg-green-500/15 border-green-500/50 ring-1 ring-green-500/30' : 'bg-gray-800 border-gray-700 hover:border-gray-500'
+                  }`}>
+                  <div className={`w-8 h-8 rounded-full overflow-hidden shrink-0 border ${on ? 'border-green-400' : 'border-gray-600'}`}>
+                    {m.photo
+                      ? <img src={m.photo} alt={m.name} className="w-full h-full object-cover" />
+                      : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: 'linear-gradient(135deg,#D81F2E,#9b1020)' }}>
+                          {m.name.split(' ').map((s: string) => s[0]).slice(0, 2).join('')}
+                        </div>
+                    }
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-sm font-medium truncate ${on ? 'text-white' : 'text-gray-400'}`}>{m.name.split(' ')[0]}</p>
+                    <p className={`text-[10px] truncate ${on ? 'text-green-400' : 'text-gray-600'}`}>{on ? `$${LUNCH_PRICE} ✓` : m.name.split(' ').slice(1).join(' ')}</p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Guests */}
+          {guests.length > 0 && (
+            <div className="mt-3 space-y-1.5">
+              <p className="text-xs text-gray-500 mb-1">Guests</p>
+              {guests.map((g) => (
+                <div key={g.id} className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-xl px-3 py-2">
+                  <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-[10px] text-gray-400 shrink-0">G</div>
+                  <span className="text-sm text-white flex-1 truncate">{g.name}</span>
+                  <span className="text-xs text-green-400">${LUNCH_PRICE}</span>
+                  <button onClick={() => setGuests((gs) => gs.filter((x) => x.id !== g.id))} className="text-gray-600 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Add guest */}
+          <div className="flex gap-2 mt-3">
+            <input value={newGuest} onChange={(e) => setNewGuest(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') addGuest() }}
+              placeholder="Add guest name…"
+              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-blue/50" />
+            <button onClick={addGuest} disabled={!newGuest.trim()}
+              className="border border-gray-700 text-gray-400 hover:text-white px-3 py-2 rounded-lg text-sm transition disabled:opacity-40">
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-gray-700 bg-gray-900/80 shrink-0">
+          {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm">
+              <span className="text-gray-400">{checkedMembers.length + guests.length} people · </span>
+              <span className="text-white font-bold">{money(total)}</span>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm text-gray-400 hover:bg-gray-800 transition">Cancel</button>
+              <button onClick={submit} disabled={saving || (checkedMembers.length === 0 && guests.length === 0)}
+                className="bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition">
+                {saving ? 'Posting…' : `Post Charges`}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {who === 'member' ? (
-          <div><label className="block text-xs text-gray-500 mb-1">Member</label>
-            <select value={form.member_id} onChange={(e) => setForm((f) => ({ ...f, member_id: e.target.value }))} className={INPUT}>
-              <option value="">Select…</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
+    </div>
+  )
+}
+
+// ─── Pay Modal ─────────────────────────────────────────────────────────────
+// Records a payment for a specific member — pre-filled with their balance.
+function PayModal({ name, memberId, balance, onDone, onClose }: {
+  name: string; memberId: string; balance: number
+  onDone: () => Promise<void>; onClose: () => void
+}) {
+  const [amount, setAmount] = useState(balance.toFixed(2))
+  const [method, setMethod] = useState<'cash' | 'debit' | 'venmo' | 'check'>('cash')
+  const [date, setDate] = useState(today())
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const METHODS = [
+    { id: 'cash', label: '💵 Cash' },
+    { id: 'debit', label: '💳 Debit' },
+    { id: 'venmo', label: '📱 Venmo' },
+    { id: 'check', label: '📝 Check' },
+  ] as const
+
+  const submit = async () => {
+    const amt = parseFloat(amount)
+    if (!amt || amt <= 0) return
+    setSaving(true); setError('')
+    try {
+      const res = await fetch('/api/treasurer/ledger', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          member_id: memberId,
+          member_name: name,
+          type: 'payment',
+          amount: amt,
+          date,
+          description: 'Payment',
+          status: 'paid',
+          notes: method,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setError(d.error || 'Payment failed.')
+        setSaving(false); return
+      }
+      // Also record income transaction
+      await fetch('/api/treasurer/transactions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'income', category: 'Member Payment',
+          description: `Payment from ${name} (${method})`,
+          amount: amt, date,
+        }),
+      })
+    } catch { setError('Network error.'); setSaving(false); return }
+    setSaving(false)
+    await onDone()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 px-0 sm:px-4">
+      <div className="bg-gray-900 border border-gray-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+          <div>
+            <h2 className="text-base font-bold text-white">Record Payment</h2>
+            <p className="text-sm text-gray-400 mt-0.5">{name}</p>
           </div>
-        ) : (
-          <div><label className="block text-xs text-gray-500 mb-1">Visitor</label>
-            <input list="visitor-names" value={form.visitorName} onChange={(e) => setForm((f) => ({ ...f, visitorName: e.target.value }))} placeholder="Visitor name" className={INPUT} />
-            <datalist id="visitor-names">{visitorNames.map((n) => <option key={n} value={n} />)}</datalist>
+          <button onClick={onClose} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="px-5 py-5 space-y-5">
+          {/* Balance owed */}
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-gray-300">Balance owed</span>
+            <span className="text-lg font-bold text-red-400">{money(balance)}</span>
           </div>
-        )}
-        <div><label className="block text-xs text-gray-500 mb-1">Date</label><input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} onClick={(e) => e.currentTarget.showPicker?.()} className={`${INPUT} cursor-pointer`} /></div>
-        <div><label className="block text-xs text-gray-500 mb-1">Amount ($)</label><input type="number" step="0.01" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="125.00" className={INPUT} /></div>
-        <div><label className="block text-xs text-gray-500 mb-1">Notes</label><input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Cash, Venmo…" className={INPUT} /></div>
-      </div>
-      <div className="flex gap-2">
-        <button onClick={submit} disabled={saving || !canSubmit} className={BTN_PRIMARY}>{saving ? 'Saving…' : 'Record Payment'}</button>
-        <button onClick={onCancel} className="px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-800 transition">Cancel</button>
+
+          {/* Amount */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1.5">Amount paid ($)</label>
+            <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-xl font-bold text-white text-center focus:outline-none focus:ring-2 focus:ring-green-500/50" />
+          </div>
+
+          {/* Payment method */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1.5">Payment method</label>
+            <div className="grid grid-cols-4 gap-2">
+              {METHODS.map((m) => (
+                <button key={m.id} onClick={() => setMethod(m.id)}
+                  className={`py-2.5 rounded-xl text-sm font-medium border transition ${
+                    method === m.id ? 'bg-green-600 border-green-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-500'
+                  }`}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Date */}
+          <div>
+            <label className="block text-xs text-gray-500 mb-1.5">Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              onClick={(e) => e.currentTarget.showPicker?.()}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:outline-none cursor-pointer" />
+          </div>
+
+          {error && <p className="text-xs text-red-400">{error}</p>}
+
+          {/* Submit */}
+          <button onClick={submit} disabled={saving || !amount || parseFloat(amount) <= 0}
+            className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white font-bold py-3.5 rounded-xl text-base transition">
+            {saving ? 'Saving…' : `Mark Paid — ${money(parseFloat(amount) || 0)}`}
+          </button>
+        </div>
       </div>
     </div>
   )
