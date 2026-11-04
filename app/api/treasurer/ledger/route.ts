@@ -38,21 +38,18 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/treasurer/ledger
- * Admin-only: add one entry, OR a weekly bill split across attendees.
+ * Admin-only: add one entry, OR record lunch charges for attendees.
  *
  * Body (single entry):
  *   { member_id, member_name, type, amount, date, description, status, notes }
  *
- * Body (weekly bill):
- *   Each member gets EXACTLY ONE charge for the week:
- *     - ate lunch  → `lunchPrice` (default $24, already includes the dues)
- *     - didn't eat → `dues` (default $4, owed regardless)
- *   The dish name is reference-only (stored on the eater's charge).
+ * Body (lunch attendance):
+ *   Only selected members and visitors are charged. Re-submitting the same
+ *   attendees for a date does not create duplicate lunch charges.
  *
  *   { weeklyBill: {
  *       date,
- *       dues?: number,          // flat non-eater amount (default 4)
- *       lunchPrice?: number,    // flat eater amount (default 24)
+ *       lunchPrice?: number,    // flat attendee amount (default 24)
  *       members: [{ member_id, member_name, ate: boolean, item?: string }],
  *       visitors?: [{ name, amount, item? }]
  *   } }
@@ -67,10 +64,17 @@ export async function POST(req: NextRequest) {
 
     if (body.weeklyBill) {
       const { date, members, visitors } = body.weeklyBill
-      const dues = Number(body.weeklyBill.dues ?? 4)
-      const lunchPrice = Number(body.weeklyBill.lunchPrice ?? 24)
-      if (!date) {
-        return NextResponse.json({ error: 'weeklyBill requires a date.' }, { status: 400 })
+      const lunchPrice = Number(body.weeklyBill.lunchPrice ?? 23)
+      const dues = Number(body.weeklyBill.dues ?? 2)
+      const validDate = typeof date === 'string' &&
+        /^\d{4}-\d{2}-\d{2}$/.test(date) &&
+        !Number.isNaN(Date.parse(`${date}T00:00:00.000Z`)) &&
+        new Date(`${date}T00:00:00.000Z`).toISOString().slice(0, 10) === date
+      if (!validDate) {
+        return NextResponse.json({ error: 'weeklyBill requires a valid date.' }, { status: 400 })
+      }
+      if (!Number.isFinite(lunchPrice) || lunchPrice <= 0) {
+        return NextResponse.json({ error: 'lunchPrice must be a positive number.' }, { status: 400 })
       }
 
       type Doc = {
@@ -79,50 +83,110 @@ export async function POST(req: NextRequest) {
         date: string; status: 'unpaid'; notes: string; item: string
       }
       const docs: Doc[] = []
+      const selectedMembers = Array.isArray(members)
+        ? members as { member_id?: string; member_name?: string; ate?: boolean; drink?: boolean; choice?: string; item?: string }[]
+        : []
+      const selectedVisitors = Array.isArray(visitors)
+        ? visitors as { name?: string; amount?: number; item?: string; description?: string }[]
+        : []
 
-      // One charge per member: $24 if ate (incl. dues), else $4 dues.
-      if (Array.isArray(members)) {
-        for (const m of members as { member_id?: string; member_name: string; ate?: boolean; item?: string }[]) {
-          if (!m.member_name) continue
-          const ate = !!m.ate
-          docs.push({
-            member_id: m.member_id ?? null,
-            member_name: m.member_name,
-            type: 'charge',
-            description: ate ? 'Weekly Lunch' : 'Weekly Dues',
-            amount: ate ? lunchPrice : dues,
-            date,
-            status: 'unpaid',
-            notes: ate ? `Lunch $${lunchPrice.toFixed(2)} (incl. $${dues.toFixed(2)} dues)` : `Weekly dues $${dues.toFixed(2)}`,
-            item: ate ? (m.item?.trim() ?? '') : '',
-          })
-        }
+      for (const m of selectedMembers) {
+        if (typeof m.member_name !== 'string' || !m.member_name.trim()) continue
+        // Determine choice: explicit 'choice' field, or legacy ate/drink booleans
+        const choice = m.choice ?? (m.ate ? 'ate' : m.drink ? 'drink' : 'none')
+        const amount = choice === 'ate' ? lunchPrice : choice === 'drink' ? 4 : dues
+        const description = choice === 'ate' ? 'Weekly Lunch' : choice === 'drink' ? 'Weekly Drink' : 'Weekly Attendance'
+        const notes = choice === 'ate' ? `Lunch $${lunchPrice}` : choice === 'drink' ? 'Drink $4' : `Attendance $${dues}`
+        docs.push({
+          member_id: m.member_id ?? null,
+          member_name: m.member_name.trim(),
+          type: 'charge',
+          description,
+          amount,
+          date,
+          status: 'unpaid',
+          notes,
+          item: choice === 'ate' ? (m.item?.trim() ?? '') : '',
+        })
       }
 
-      // Visitor lunch charges — no member link
-      if (Array.isArray(visitors)) {
-        for (const v of visitors as { name: string; amount: number; item?: string }[]) {
-          if (!v.name?.trim() || !(v.amount > 0)) continue
-          docs.push({
-            member_id: null,
-            member_name: v.name.trim(),
-            type: 'charge',
-            description: 'Visitor Lunch',
-            amount: Number(Number(v.amount).toFixed(2)),
-            date,
-            status: 'unpaid',
-            notes: 'Visitor',
-            item: v.item?.trim() ?? '',
-          })
+      for (const v of selectedVisitors) {
+        if (!v.name?.trim() || typeof v.amount !== 'number' || !Number.isFinite(v.amount) || v.amount <= 0) {
+          return NextResponse.json({ error: 'Each visitor requires a name and a positive amount.' }, { status: 400 })
         }
+        if (v.item !== undefined && typeof v.item !== 'string') {
+          return NextResponse.json({ error: 'Visitor item must be a string.' }, { status: 400 })
+        }
+        docs.push({
+          member_id: null,
+          member_name: v.name.trim(),
+          type: 'charge',
+          description: (typeof v.description === 'string' && v.description) ? v.description : 'Visitor Lunch',
+          amount: Number(v.amount.toFixed(2)),
+          date,
+          status: 'unpaid',
+          notes: 'Visitor',
+          item: v.item?.trim() ?? '',
+        })
       }
 
       if (docs.length === 0) {
-        return NextResponse.json({ error: 'Nothing to charge — provide members or visitors.' }, { status: 400 })
+        return NextResponse.json({ error: 'Select at least one lunch attendee.' }, { status: 400 })
       }
 
-      const created = await LedgerEntry.insertMany(docs)
-      return NextResponse.json({ created: created.length }, { status: 201 })
+      const MEMBER_DESCS = ['Weekly Lunch', 'Weekly Drink', 'Weekly Attendance']
+      const memberDocs = docs.filter((doc) => MEMBER_DESCS.includes(doc.description))
+      const visitorDocs = docs.filter((doc) => !MEMBER_DESCS.includes(doc.description))
+      const [existingMembers, existingVisitors] = await Promise.all([
+        memberDocs.length
+          ? LedgerEntry.find({
+              date,
+              type: 'charge',
+              description: { $in: MEMBER_DESCS },
+              $or: [
+                { member_id: { $in: memberDocs.map((doc) => doc.member_id).filter(Boolean) } },
+                { member_name: { $in: memberDocs.map((doc) => doc.member_name) } },
+              ],
+            }).select('member_id member_name').lean()
+          : [],
+        visitorDocs.length
+          ? LedgerEntry.find({
+              date,
+              type: 'charge',
+              description: { $nin: MEMBER_DESCS },
+              member_name: { $in: visitorDocs.map((doc) => doc.member_name) },
+            }).select('member_name').lean()
+          : [],
+      ])
+
+      const existingMemberIds = new Set(existingMembers.map((entry) => entry.member_id?.toString()).filter(Boolean))
+      const existingMemberNames = new Set(existingMembers
+        .filter((entry) => !entry.member_id)
+        .map((entry) => entry.member_name))
+      const existingVisitorNames = new Set(existingVisitors.map((entry) => entry.member_name.toLowerCase()))
+      const seenMemberIds = new Set<string>()
+      const seenMemberNames = new Set<string>()
+      const seenVisitorNames = new Set<string>()
+      const newDocs = docs.filter((doc) => {
+        if (MEMBER_DESCS.includes(doc.description)) {
+          const memberId = doc.member_id?.toString()
+          if ((memberId && (existingMemberIds.has(memberId) || seenMemberIds.has(memberId))) ||
+              existingMemberNames.has(doc.member_name) || (!memberId && seenMemberNames.has(doc.member_name))) return false
+          if (memberId) seenMemberIds.add(memberId)
+          else seenMemberNames.add(doc.member_name)
+          return true
+        }
+        const visitorName = doc.member_name.toLowerCase()
+        if (existingVisitorNames.has(visitorName) || seenVisitorNames.has(visitorName)) return false
+        seenVisitorNames.add(visitorName)
+        return true
+      })
+
+      if (newDocs.length === 0) {
+        return NextResponse.json({ created: 0, skipped: docs.length })
+      }
+      const created = await LedgerEntry.insertMany(newDocs)
+      return NextResponse.json({ created: created.length, skipped: docs.length - created.length }, { status: 201 })
     }
 
     // Single entry

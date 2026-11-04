@@ -28,8 +28,25 @@ const EXPENSE_CATEGORIES = ['Weekly Lunch', '50/50 Payout', 'Room Rental', 'Supp
 // Income categories where the payment should be tied to a specific person.
 const PERSON_CATEGORIES = ['Member Payment', 'Guest Fee', 'Dues']
 const isPersonCategory = (c: string) => PERSON_CATEGORIES.includes(c)
-const LUNCH_PRICE = 24
-const WEEKLY_DUES = 4
+// ─── Lunch pricing (hardcoded — will move to ChapterSetting) ──────────────────
+const RATE_ATTENDED  = 2   // showed up, no food or drink
+const RATE_DRINK     = 4   // had a drink only
+const RATE_LUNCH     = 23  // ate lunch
+// Convenience labels shown in the modal
+type MealChoice = 'none' | 'drink' | 'ate'
+const MEAL_LABEL: Record<MealChoice, string> = { none: `$${RATE_ATTENDED} — attended`, drink: `$${RATE_DRINK} — drink`, ate: `$${RATE_LUNCH} — lunch` }
+const MEAL_AMOUNT: Record<MealChoice, number> = { none: RATE_ATTENDED, drink: RATE_DRINK, ate: RATE_LUNCH }
+const MEAL_NEXT: Record<MealChoice, MealChoice> = { none: 'drink', drink: 'ate', ate: 'none' }
+const MEAL_COLOR: Record<MealChoice, string> = {
+  none:  'bg-gray-800 border-gray-700 text-gray-400',
+  drink: 'bg-blue-500/15 border-blue-500/40 text-blue-300',
+  ate:   'bg-green-500/15 border-green-500/50 text-white',
+}
+const MEAL_BADGE: Record<MealChoice, string> = {
+  none:  'text-gray-500',
+  drink: 'text-blue-400',
+  ate:   'text-green-400',
+}
 const STARTING_BALANCE_DEFAULT = 3201.49
 
 const money = (n: number) => `$${n.toFixed(2)}`
@@ -197,7 +214,7 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search member…"
           className={`${INPUT} max-w-48`} />
         <button onClick={() => setModal('lunch')} className={BTN_PRIMARY}>
-          <DollarSign className="w-4 h-4" /> Thursday Lunch
+          <DollarSign className="w-4 h-4" /> Record Lunch
         </button>
       </div>
 
@@ -316,6 +333,7 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
       {modal === 'lunch' && (
         <LunchModal
           members={members}
+          ledger={ledger}
           onDone={async () => { setModal(null); await refresh() }}
           onClose={() => setModal(null)}
         />
@@ -336,40 +354,83 @@ function LedgerTab({ members, ledger, refresh, startingBalance }: { members: Mem
 }
 
 // ─── Lunch Modal ─────────────────────────────────────────────────────────────
-// Tap members/guests who got lunch → posts $24 charge each to ledger.
-function LunchModal({ members, onDone, onClose }: { members: Member[]; onDone: () => Promise<void>; onClose: () => void }) {
+// Each person cycles through: none ($2) → drink ($4) → ate ($23) → none
+// Default for everyone is "none" = $2 weekly attendance fee.
+// Tap once → drink. Tap again → ate. Tap again → back to none.
+function LunchModal({ members, ledger, onDone, onClose }: { members: Member[]; ledger: LedgerEntry[]; onDone: () => Promise<void>; onClose: () => void }) {
   const [date, setDate] = useState(today())
-  const [checked, setChecked] = useState<Record<string, boolean>>({})
-  const [guests, setGuests] = useState<{ id: string; name: string }[]>([])
+  // choices[member_id] = 'none' | 'drink' | 'ate'  (default 'none' = $2)
+  const [choices, setChoices] = useState<Record<string, MealChoice>>({})
+  // guests always default to 'ate' since they came specifically for lunch
+  const [guests, setGuests] = useState<{ id: string; name: string; choice: MealChoice; recorded: boolean }[]>([])
   const [newGuest, setNewGuest] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  const toggle = (id: string) => setChecked((s) => ({ ...s, [id]: !s[id] }))
+  // Find already-recorded entries for this date so we can show them as locked
+  const recordedMembers = useMemo(() => new Set(
+    ledger
+      .filter((e) => e.type === 'charge' && ['Weekly Lunch', 'Weekly Drink', 'Weekly Attendance'].includes(e.description) && e.date === date)
+      .flatMap((e) => {
+        const m = members.find((m) => e.member_id ? m.id === e.member_id : m.name === e.member_name)
+        return m ? [m.id] : []
+      })
+  ), [date, ledger, members])
+
+  // When date changes, pre-select already-recorded members but keep them locked
+  useEffect(() => {
+    setChoices({})
+    setGuests([])
+  }, [date])
+
+  const cycle = (id: string) => {
+    if (recordedMembers.has(id)) return
+    setChoices((s) => ({ ...s, [id]: MEAL_NEXT[s[id] ?? 'none'] }))
+  }
+
+  const cycleGuest = (id: string) =>
+    setGuests((gs) => gs.map((g) => g.id === id ? { ...g, choice: MEAL_NEXT[g.choice] } : g))
 
   const addGuest = () => {
     const name = newGuest.trim()
     if (!name) return
-    setGuests((g) => [...g, { id: Math.random().toString(36).slice(2), name }])
+    setGuests((g) => [...g, { id: Math.random().toString(36).slice(2), name, choice: 'ate', recorded: false }])
     setNewGuest('')
   }
 
-  const checkedMembers = members.filter((m) => checked[m.id])
-  const total = (checkedMembers.length + guests.length) * LUNCH_PRICE
+  // Everyone gets a charge — default 'none' = $2 attendance.
+  // Only members not already recorded.
+  const newMembers = members.filter((m) => !recordedMembers.has(m.id))
+  const newGuests  = guests.filter((g) => !g.recorded)
+
+  const total =
+    newMembers.reduce((s, m) => s + MEAL_AMOUNT[choices[m.id] ?? 'none'], 0) +
+    newGuests.reduce((s, g) => s + MEAL_AMOUNT[g.choice], 0)
 
   const submit = async () => {
-    if (checkedMembers.length === 0 && guests.length === 0) return
+    if (newMembers.length === 0 && newGuests.length === 0) return
     setSaving(true); setError('')
+
+    // Build per-member description based on choice
+    const descOf = (c: MealChoice) =>
+      c === 'ate' ? 'Weekly Lunch' : c === 'drink' ? 'Weekly Drink' : 'Weekly Attendance'
+
     try {
       const res = await fetch('/api/treasurer/ledger', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           weeklyBill: {
             date,
-            dues: WEEKLY_DUES,
-            lunchPrice: LUNCH_PRICE,
-            members: members.map((m) => ({ member_id: m.id, member_name: m.name, ate: !!checked[m.id] })),
-            visitors: guests.map((g) => ({ name: g.name, amount: LUNCH_PRICE })),
+            // Pass custom amounts — we override the weeklyBill logic by sending
+            // each member as a visitor-style entry with their specific amount.
+            // Use dues=2, lunchPrice=23 — members with ate=true get lunchPrice, drink gets dues+2 via notes.
+            dues: RATE_ATTENDED,
+            lunchPrice: RATE_LUNCH,
+            members: newMembers.map((m) => {
+              const c = choices[m.id] ?? 'none'
+              return { member_id: m.id, member_name: m.name, ate: c === 'ate', drink: c === 'drink', choice: c }
+            }),
+            visitors: newGuests.map((g) => ({ name: g.name, amount: MEAL_AMOUNT[g.choice], description: descOf(g.choice) })),
           },
         }),
       })
@@ -383,15 +444,17 @@ function LunchModal({ members, onDone, onClose }: { members: Member[]; onDone: (
     await onDone()
   }
 
+  const totalPeople = newMembers.length + newGuests.length
+
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 px-0 sm:px-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] flex flex-col shadow-2xl">
+      <div className="bg-gray-900 border border-gray-700 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[92vh] flex flex-col shadow-2xl">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700 shrink-0">
           <div>
             <h2 className="text-base font-bold text-white">Thursday Lunch</h2>
-            <p className="text-xs text-gray-500 mt-0.5">${LUNCH_PRICE} per person · tap to select</p>
+            <p className="text-xs text-gray-500 mt-0.5">Tap to cycle: attended $2 → drink $4 → lunch $23</p>
           </div>
           <div className="flex items-center gap-3">
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
@@ -401,17 +464,23 @@ function LunchModal({ members, onDone, onClose }: { members: Member[]; onDone: (
           </div>
         </div>
 
+        {/* Legend */}
+        <div className="flex items-center gap-3 px-5 py-2 border-b border-gray-800 shrink-0 text-xs">
+          <span className="flex items-center gap-1.5 text-gray-500"><span className="w-2.5 h-2.5 rounded-sm bg-gray-700 inline-block" /> $2 attended</span>
+          <span className="flex items-center gap-1.5 text-blue-400"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500/30 inline-block" /> $4 drink</span>
+          <span className="flex items-center gap-1.5 text-green-400"><span className="w-2.5 h-2.5 rounded-sm bg-green-500/30 inline-block" /> $23 lunch</span>
+        </div>
+
         {/* Member grid — scrollable */}
-        <div className="overflow-y-auto flex-1 px-4 py-3">
+        <div className="overflow-y-auto flex-1 px-4 py-3 space-y-3">
           <div className="grid grid-cols-2 gap-2">
             {members.map((m) => {
-              const on = !!checked[m.id]
+              const locked = recordedMembers.has(m.id)
+              const choice: MealChoice = locked ? 'ate' : (choices[m.id] ?? 'none')
               return (
-                <button key={m.id} onClick={() => toggle(m.id)}
-                  className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border transition-all text-left ${
-                    on ? 'bg-green-500/15 border-green-500/50 ring-1 ring-green-500/30' : 'bg-gray-800 border-gray-700 hover:border-gray-500'
-                  }`}>
-                  <div className={`w-8 h-8 rounded-full overflow-hidden shrink-0 border ${on ? 'border-green-400' : 'border-gray-600'}`}>
+                <button key={m.id} onClick={() => cycle(m.id)} disabled={locked}
+                  className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border transition-all text-left disabled:opacity-60 disabled:cursor-default ${MEAL_COLOR[locked ? 'ate' : choice]}`}>
+                  <div className={`w-8 h-8 rounded-full overflow-hidden shrink-0 border-2 ${choice === 'ate' ? 'border-green-400' : choice === 'drink' ? 'border-blue-400' : 'border-gray-600'}`}>
                     {m.photo
                       ? <img src={m.photo} alt={m.name} className="w-full h-full object-cover" />
                       : <div className="w-full h-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: 'linear-gradient(135deg,#D81F2E,#9b1020)' }}>
@@ -420,8 +489,10 @@ function LunchModal({ members, onDone, onClose }: { members: Member[]; onDone: (
                     }
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-medium truncate ${on ? 'text-white' : 'text-gray-400'}`}>{m.name.split(' ')[0]}</p>
-                    <p className={`text-[10px] truncate ${on ? 'text-green-400' : 'text-gray-600'}`}>{on ? `$${LUNCH_PRICE} ✓` : m.name.split(' ').slice(1).join(' ')}</p>
+                    <p className="text-sm font-medium truncate">{m.name.split(' ')[0]}</p>
+                    <p className={`text-[10px] font-semibold ${locked ? 'text-green-400' : MEAL_BADGE[choice]}`}>
+                      {locked ? 'Already recorded' : `$${MEAL_AMOUNT[choice]} ${choice === 'none' ? '· attended' : choice === 'drink' ? '· drink ☕' : '· lunch 🍽️'}`}
+                    </p>
                   </div>
                 </button>
               )
@@ -430,21 +501,31 @@ function LunchModal({ members, onDone, onClose }: { members: Member[]; onDone: (
 
           {/* Guests */}
           {guests.length > 0 && (
-            <div className="mt-3 space-y-1.5">
-              <p className="text-xs text-gray-500 mb-1">Guests</p>
+            <div className="space-y-1.5">
+              <p className="text-xs text-gray-500">Guests</p>
               {guests.map((g) => (
-                <div key={g.id} className="flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-xl px-3 py-2">
+                <div key={g.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${MEAL_COLOR[g.choice]}`}>
                   <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-[10px] text-gray-400 shrink-0">G</div>
-                  <span className="text-sm text-white flex-1 truncate">{g.name}</span>
-                  <span className="text-xs text-green-400">${LUNCH_PRICE}</span>
-                  <button onClick={() => setGuests((gs) => gs.filter((x) => x.id !== g.id))} className="text-gray-600 hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+                  <span className="text-sm flex-1 truncate">{g.name}</span>
+                  {g.recorded ? (
+                    <span className="text-[10px] text-green-400">Recorded</span>
+                  ) : (
+                    <>
+                      <button onClick={() => cycleGuest(g.id)}
+                        className={`text-xs px-2 py-0.5 rounded-full border transition ${MEAL_COLOR[g.choice]}`}>
+                        ${MEAL_AMOUNT[g.choice]}
+                      </button>
+                      <button onClick={() => setGuests((gs) => gs.filter((x) => x.id !== g.id))}
+                        className="text-gray-600 hover:text-red-400 shrink-0"><X className="w-3.5 h-3.5" /></button>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
           )}
 
           {/* Add guest */}
-          <div className="flex gap-2 mt-3">
+          <div className="flex gap-2">
             <input value={newGuest} onChange={(e) => setNewGuest(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') addGuest() }}
               placeholder="Add guest name…"
@@ -460,15 +541,22 @@ function LunchModal({ members, onDone, onClose }: { members: Member[]; onDone: (
         <div className="px-5 py-4 border-t border-gray-700 bg-gray-900/80 shrink-0">
           {error && <p className="text-xs text-red-400 mb-2">{error}</p>}
           <div className="flex items-center justify-between gap-3">
-            <div className="text-sm">
-              <span className="text-gray-400">{checkedMembers.length + guests.length} people · </span>
-              <span className="text-white font-bold">{money(total)}</span>
+            <div className="text-sm space-y-0.5">
+              <div>
+                <span className="text-gray-400">{totalPeople} members · </span>
+                <span className="text-white font-bold">{money(total)}</span>
+              </div>
+              <div className="text-[11px] text-gray-600">
+                {newMembers.filter(m => (choices[m.id] ?? 'none') === 'ate').length} ate ·{' '}
+                {newMembers.filter(m => (choices[m.id] ?? 'none') === 'drink').length} drink ·{' '}
+                {newMembers.filter(m => (choices[m.id] ?? 'none') === 'none').length + newGuests.filter(g => g.choice === 'none').length} attended
+              </div>
             </div>
             <div className="flex gap-2">
               <button onClick={onClose} className="px-4 py-2.5 rounded-xl text-sm text-gray-400 hover:bg-gray-800 transition">Cancel</button>
-              <button onClick={submit} disabled={saving || (checkedMembers.length === 0 && guests.length === 0)}
+              <button onClick={submit} disabled={saving || totalPeople === 0}
                 className="bg-green-600 hover:bg-green-500 disabled:opacity-40 text-white font-semibold px-5 py-2.5 rounded-xl text-sm transition">
-                {saving ? 'Posting…' : `Post Charges`}
+                {saving ? 'Posting…' : 'Post Charges'}
               </button>
             </div>
           </div>
@@ -794,6 +882,7 @@ function TransactionForm({ members, visitors, onDone, onCancel }: { members: Mem
 function ReportTab({ members, ledger, transactions, userEmail, startingBalance }: { members: Member[]; ledger: LedgerEntry[]; transactions: Transaction[]; userEmail: string; startingBalance: number }) {
   const [showPreview, setShowPreview] = useState(false)
   const [sent, setSent] = useState('')
+  const [monthKey, setMonthKey] = useState(() => today().slice(0, 7))
 
   const statements = useMemo(() => members.map((m) => {
     const { charged, paid, balance, entries } = memberBalance(ledger, m.name)
@@ -801,39 +890,46 @@ function ReportTab({ members, ledger, transactions, userEmail, startingBalance }
   }).sort((a, b) => b.balance - a.balance), [members, ledger])
 
   const totalOwed = statements.reduce((s, m) => (m.balance > 0 ? s + m.balance : s), 0)
-  const now = new Date()
-  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthLabel = new Date(`${monthKey}-01T12:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   const monthTxs = transactions.filter((t) => t.date?.startsWith(monthKey))
   const income = monthTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const expense = monthTxs.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
   const net = income - expense
 
   const exportCSV = () => {
-    const rows = [['Member', 'Charged', 'Paid', 'Balance', 'Status'], ...statements.map((m) => [m.name, m.charged.toFixed(2), m.paid.toFixed(2), m.balance.toFixed(2), !m.hasActivity ? 'No activity' : m.balance > 0 ? 'Owes' : m.balance < 0 ? 'Credit' : 'Paid Up'])]
-    const blob = new Blob([rows.map((r) => r.join(',')).join('\n')], { type: 'text/csv' })
+    const csvCell = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`
+    const rows = [
+      ['Monthly Treasury Report', monthLabel],
+      ['Income', income.toFixed(2)],
+      ['Expenses', expense.toFixed(2)],
+      ['Net', net.toFixed(2)],
+      [],
+      ['Monthly Transactions'],
+      ['Date', 'Type', 'Category', 'Description', 'Amount'],
+      ...monthTxs.map((t) => [t.date, t.type, t.category, t.description || t.category, `${t.type === 'income' ? '' : '-'}${t.amount.toFixed(2)}`]),
+      [],
+      ['Current Member Balances'],
+      ['Member', 'Charged to date', 'Paid to date', 'Balance', 'Status'],
+      ...statements.map((m) => [m.name, m.charged.toFixed(2), m.paid.toFixed(2), m.balance.toFixed(2), !m.hasActivity ? 'No activity' : m.balance > 0 ? 'Owes' : m.balance < 0 ? 'Credit' : 'Paid Up']),
+    ]
+    const blob = new Blob([rows.map((row) => row.map(csvCell).join(',')).join('\n')], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = `treasurer-report-${monthKey}.csv`; a.click(); URL.revokeObjectURL(url)
   }
 
-  // Line-item export — one row per charge/payment, includes the dish for cross-reference.
-  const csvCell = (v: string) => `"${String(v).replace(/"/g, '""')}"`
-  const exportLineItems = () => {
-    const header = ['Date', 'Member', 'Type', 'Description', 'Dish', 'Amount', 'Status']
-    const lines = [...ledger]
-      .sort((a, b) => (a.date < b.date ? 1 : -1))
-      .map((e) => [e.date, e.member_name, e.type, e.description, e.item ?? '', e.amount.toFixed(2), e.status].map(csvCell).join(','))
-    const blob = new Blob([[header.join(','), ...lines].join('\n')], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url; a.download = `treasurer-line-items-${monthKey}.csv`; a.click(); URL.revokeObjectURL(url)
-  }
-
   return (
     <div className="space-y-4">
-      {showPreview && <ReportPreviewModal statements={statements} totalOwed={totalOwed} income={income} expense={expense} net={net} startingBalance={startingBalance} defaultTo={userEmail} onClose={() => setShowPreview(false)} onSent={(to) => { setSent(`Report sent to ${to}`); setShowPreview(false) }} />}
+      {showPreview && <ReportPreviewModal statements={statements} totalOwed={totalOwed} income={income} expense={expense} net={net} monthKey={monthKey} monthLabel={monthLabel} startingBalance={startingBalance} defaultTo={userEmail} onClose={() => setShowPreview(false)} onSent={(to) => { setSent(`Report sent to ${to}`); setShowPreview(false) }} />}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-white flex items-center gap-2"><BarChart3 className="w-4 h-4 text-brand-blue" /> Treasury Report</span>
-        <div className="flex gap-2">
+        <div>
+          <span className="text-sm font-semibold text-white flex items-center gap-2"><BarChart3 className="w-4 h-4 text-brand-blue" /> Monthly Treasury Report</span>
+          <p className="text-xs text-gray-500 mt-1">Monthly cash flow and current member balances</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="report-month" className="text-xs text-gray-400">Report month</label>
+          <input id="report-month" type="month" value={monthKey} onChange={(e) => { if (e.target.value) setMonthKey(e.target.value) }}
+            className={`${INPUT} w-auto cursor-pointer`} />
           <button onClick={exportCSV} className="flex items-center gap-1.5 border border-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition"><Download className="w-4 h-4" /> Export CSV</button>
           <button onClick={() => setShowPreview(true)} className={BTN_PRIMARY}><Mail className="w-4 h-4" /> Preview &amp; Send</button>
         </div>
@@ -841,11 +937,36 @@ function ReportTab({ members, ledger, transactions, userEmail, startingBalance }
 
       {sent && <div className="bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3 text-sm text-green-400 flex items-center justify-between"><span>✓ {sent}</span><button onClick={() => setSent('')}><X className="w-4 h-4" /></button></div>}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Starting Balance" value={money(startingBalance)} accent="border-green-500" color="text-green-400" />
-        <StatCard label="Outstanding" value={money(totalOwed)} accent="border-red-500" color="text-red-400" />
-        <StatCard label="Income (mo)" value={money(income)} accent="border-brand-blue" color="text-brand-blue" />
-        <StatCard label="Net (mo)" value={`${net >= 0 ? '+' : ''}${money(net)}`} accent={net >= 0 ? 'border-purple-500' : 'border-orange-500'} color={net >= 0 ? 'text-purple-400' : 'text-orange-400'} />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <StatCard label="Opening Balance" value={money(startingBalance)} accent="border-green-500" color="text-green-400" sub="Configured starting amount" />
+        <StatCard label="Outstanding" value={money(totalOwed)} accent="border-red-500" color="text-red-400" sub="Current member balances" />
+        <StatCard label={`${monthLabel} Income`} value={money(income)} accent="border-brand-blue" color="text-brand-blue" />
+        <StatCard label={`${monthLabel} Expenses`} value={money(expense)} accent="border-red-500" color="text-red-400" />
+        <StatCard label={`${monthLabel} Net`} value={`${net >= 0 ? '+' : ''}${money(net)}`} accent={net >= 0 ? 'border-purple-500' : 'border-orange-500'} color={net >= 0 ? 'text-purple-400' : 'text-orange-400'} />
+      </div>
+
+      <div className={CARD + ' overflow-hidden'}>
+        <div className="px-4 py-3 border-b border-gray-700 bg-gray-900/40 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-white">{monthLabel} Cash Flow</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Income and expenses recorded for this month</p>
+          </div>
+          <span className={`text-sm font-bold ${net >= 0 ? 'text-green-400' : 'text-orange-400'}`}>Net {net >= 0 ? '+' : ''}{money(net)}</span>
+        </div>
+        {monthTxs.length === 0 ? <p className="text-sm text-gray-500 text-center py-8">No income or expenses recorded for {monthLabel}.</p> :
+          <div className="divide-y divide-gray-700/50">
+            {[...monthTxs].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).map((tx) => (
+              <div key={tx.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-200 truncate">{tx.description || tx.category}</p>
+                  <p className="text-xs text-gray-500">{tx.category} · {tx.date}</p>
+                </div>
+                <span className={`text-sm font-semibold tabular-nums ${tx.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
+                  {tx.type === 'income' ? '+' : '-'}{money(tx.amount)}
+                </span>
+              </div>
+            ))}
+          </div>}
       </div>
 
       <MemberBalances statements={statements} />
@@ -854,7 +975,7 @@ function ReportTab({ members, ledger, transactions, userEmail, startingBalance }
 }
 
 function MemberBalances({ statements }: { statements: { name: string; charged: number; paid: number; balance: number; hasActivity: boolean }[] }) {
-  const [owingOnly, setOwingOnly] = useState(false)
+  const [owingOnly, setOwingOnly] = useState(true)
   const owingCount = statements.filter((m) => m.balance > 0).length
   const shown = owingOnly ? statements.filter((m) => m.balance > 0) : statements
 
@@ -868,7 +989,10 @@ function MemberBalances({ statements }: { statements: { name: string; charged: n
   return (
     <div className={CARD + ' overflow-hidden'}>
       <div className="px-4 py-2.5 border-b border-gray-700 bg-gray-900/40 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Member Balances</h3>
+        <div>
+          <h3 className="text-sm font-semibold text-white">Current Member Balances</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Lifetime ledger balance as of today</p>
+        </div>
         <button
           onClick={() => setOwingOnly((v) => !v)}
           className={`text-xs px-2.5 py-1 rounded-md border transition ${owingOnly ? 'bg-red-500/15 border-red-500/30 text-red-400' : 'border-gray-700 text-gray-400 hover:text-gray-200'}`}
@@ -893,9 +1017,9 @@ function MemberBalances({ statements }: { statements: { name: string; charged: n
   )
 }
 
-function ReportPreviewModal({ statements, totalOwed, income, expense, net, startingBalance, defaultTo, onClose, onSent }: {
+function ReportPreviewModal({ statements, totalOwed, income, expense, net, monthKey, monthLabel, startingBalance, defaultTo, onClose, onSent }: {
   statements: { name: string; charged: number; paid: number; balance: number; hasActivity: boolean }[]
-  totalOwed: number; income: number; expense: number; net: number; startingBalance: number; defaultTo: string
+  totalOwed: number; income: number; expense: number; net: number; monthKey: string; monthLabel: string; startingBalance: number; defaultTo: string
   onClose: () => void; onSent: (to: string) => void
 }) {
   const [to, setTo] = useState(defaultTo)
@@ -905,7 +1029,7 @@ function ReportPreviewModal({ statements, totalOwed, income, expense, net, start
   const send = async () => {
     setSending(true); setError('')
     try {
-      const res = await fetch('/api/treasurer/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) })
+      const res = await fetch('/api/treasurer/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to, month: monthKey }) })
       const data = await res.json()
       if (data.success) onSent(data.to)
       else setError(data.error || 'Send failed')
@@ -918,15 +1042,16 @@ function ReportPreviewModal({ statements, totalOwed, income, expense, net, start
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-start justify-center p-4 overflow-y-auto" onClick={onClose}>
       <div className="bg-gray-800 border border-gray-700 rounded-2xl w-full max-w-2xl my-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
-          <h2 className="font-semibold text-white text-sm flex items-center gap-2"><Mail className="w-4 h-4 text-brand-blue" /> Preview Treasurer Report</h2>
+          <h2 className="font-semibold text-white text-sm flex items-center gap-2"><Mail className="w-4 h-4 text-brand-blue" /> Preview {monthLabel} Report</h2>
           <button onClick={onClose} className="text-gray-500 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-            <div className="bg-gray-900 rounded-lg py-2"><p className="text-xs text-gray-500">Start Bal</p><p className="text-green-400 font-bold">{money(startingBalance)}</p></div>
-            <div className="bg-gray-900 rounded-lg py-2"><p className="text-xs text-gray-500">Outstanding</p><p className="text-red-400 font-bold">{money(totalOwed)}</p></div>
-            <div className="bg-gray-900 rounded-lg py-2"><p className="text-xs text-gray-500">Income</p><p className="text-brand-blue font-bold">{money(income)}</p></div>
-            <div className="bg-gray-900 rounded-lg py-2"><p className="text-xs text-gray-500">Net</p><p className={`font-bold ${net >= 0 ? 'text-purple-400' : 'text-orange-400'}`}>{net >= 0 ? '+' : ''}{money(net)}</p></div>
+            <div className="bg-gray-900 rounded-lg py-2"><p className="text-xs text-gray-500">Opening Balance</p><p className="text-green-400 font-bold">{money(startingBalance)}</p></div>
+            <div className="bg-gray-900 rounded-lg py-2"><p className="text-xs text-gray-500">Current Owed</p><p className="text-red-400 font-bold">{money(totalOwed)}</p></div>
+            <div className="bg-gray-900 rounded-lg py-2"><p className="text-xs text-gray-500">{monthLabel} Income</p><p className="text-brand-blue font-bold">{money(income)}</p></div>
+            <div className="bg-gray-900 rounded-lg py-2"><p className="text-xs text-gray-500">{monthLabel} Expenses</p><p className="text-red-400 font-bold">{money(expense)}</p></div>
+            <div className="bg-gray-900 rounded-lg py-2"><p className="text-xs text-gray-500">{monthLabel} Net</p><p className={`font-bold ${net >= 0 ? 'text-purple-400' : 'text-orange-400'}`}>{net >= 0 ? '+' : ''}{money(net)}</p></div>
           </div>
           <div className="bg-gray-900 rounded-lg divide-y divide-gray-800">
             {statements.map((m) => (
