@@ -26,6 +26,9 @@ yarn-error.log*
 .idea
 .vscode
 
+# Financial data — bank statements, receipts (PII, never commit)
+DATA/
+
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts

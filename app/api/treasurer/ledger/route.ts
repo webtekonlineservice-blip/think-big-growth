@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
  *
  *   { weeklyBill: {
  *       date,
- *       lunchPrice?: number,    // flat attendee amount (default 24)
+ *       lunchPrice?: number,    // flat lunch amount (default 23)
  *       members: [{ member_id, member_name, ate: boolean, item?: string }],
  *       visitors?: [{ name, amount, item? }]
  *   } }

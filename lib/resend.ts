@@ -217,7 +217,7 @@ export interface TreasurerReportData {
   monthIncome: number
   monthExpense: number
   monthLabel: string
-  transactions: { date: string; description: string; type: string; amount: number }[]
+  transactions: { date: string; description: string; category: string; type: string; amount: number }[]
 }
 
 function money(n: number): string {
@@ -267,6 +267,14 @@ export async function sendTreasurerReport({
           </div>
         </td>
         <td width="50%" style="padding:4px;">
+          <div style="background:#111827;border:1px solid #374151;border-left:3px solid #dc2626;border-radius:8px;padding:14px;">
+            <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">${data.monthLabel} Expenses</p>
+            <p style="margin:4px 0 0;font-size:22px;font-weight:800;color:#f87171;">${money(data.monthExpense)}</p>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td width="50%" style="padding:4px;">
           <div style="background:#111827;border:1px solid #374151;border-left:3px solid ${net >= 0 ? '#7c3aed' : '#f59e0b'};border-radius:8px;padding:14px;">
             <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;">${data.monthLabel} Net</p>
             <p style="margin:4px 0 0;font-size:22px;font-weight:800;color:${net >= 0 ? '#a78bfa' : '#fbbf24'};">${net >= 0 ? '+' : ''}${money(net)}</p>
@@ -288,12 +296,12 @@ export async function sendTreasurerReport({
     .join('')
 
   const txRows = data.transactions
-    .slice(0, 15)
     .map(
       (t) => `
       <tr>
         <td style="padding:8px 12px;border-bottom:1px solid #374151;color:#6b7280;font-size:13px;">${t.date}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #374151;color:#d1d5db;font-size:13px;">${t.description}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #374151;color:#9ca3af;font-size:13px;">${t.category}</td>
         <td style="padding:8px 12px;border-bottom:1px solid #374151;text-align:right;font-size:13px;font-weight:600;color:${t.type === 'income' ? '#4ade80' : '#f87171'};">
           ${t.type === 'income' ? '+' : '-'}${money(t.amount)}
         </td>
@@ -302,7 +310,7 @@ export async function sendTreasurerReport({
     .join('')
 
   const html = layout(`
-    <h1 style="margin:0 0 6px;font-size:24px;font-weight:800;color:#f9fafb;">Treasurer's Report</h1>
+    <h1 style="margin:0 0 6px;font-size:24px;font-weight:800;color:#f9fafb;">Treasurer's Report — ${data.monthLabel}</h1>
     <p style="color:#6b7280;font-size:13px;margin:0 0 24px;">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
 
     ${summaryCards}
@@ -326,11 +334,12 @@ export async function sendTreasurerReport({
       <tr style="background:#1f2937;">
         <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;">Date</th>
         <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;">Description</th>
+        <th style="padding:8px 12px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;">Category</th>
         <th style="padding:8px 12px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;">Amount</th>
       </tr>
       ${txRows}
       <tr style="background:#1f2937;">
-        <td colspan="2" style="padding:10px 12px;font-weight:700;color:#d1d5db;">Net</td>
+        <td colspan="3" style="padding:10px 12px;font-weight:700;color:#d1d5db;">Net</td>
         <td style="padding:10px 12px;text-align:right;font-weight:800;color:${net >= 0 ? '#4ade80' : '#f87171'};">${net >= 0 ? '+' : ''}${money(net)}</td>
       </tr>
     </table>`
@@ -343,7 +352,7 @@ export async function sendTreasurerReport({
   return getResend().emails.send({
     from: FROM,
     to: Array.isArray(to) ? to : [to],
-    subject: `Treasurer Report — Think Big St. Louis — ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`,
+    subject: `Treasurer Report — Think Big St. Louis — ${data.monthLabel}`,
     html,
   })
 }

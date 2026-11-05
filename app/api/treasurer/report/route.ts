@@ -6,6 +6,7 @@ import { getSession } from '@/lib/auth'
 import { sendTreasurerReport, type TreasurerReportData } from '@/lib/resend'
 
 const BANK_BALANCE = 3322.70 // as of 10/01/2026 — update as statements come in
+const MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/
 
 /**
  * Build the treasurer report data from the ledger + transactions.
@@ -52,6 +53,7 @@ async function buildReportData(month?: string): Promise<TreasurerReportData> {
     transactions: monthTxs.map((t) => ({
       date: t.date,
       description: t.description || t.category,
+      category: t.category,
       type: t.type,
       amount: t.amount || 0,
     })),
@@ -67,6 +69,9 @@ export async function GET(req: NextRequest) {
 
   try {
     const month = req.nextUrl.searchParams.get('month') ?? undefined
+    if (month && !MONTH_PATTERN.test(month)) {
+      return NextResponse.json({ error: 'month must use YYYY-MM format.' }, { status: 400 })
+    }
     const data = await buildReportData(month)
     return NextResponse.json(data)
   } catch (err) {
@@ -87,6 +92,9 @@ export async function POST(req: NextRequest) {
     const { to, month } = await req.json()
     const recipient = to || session.email
     if (!recipient) return NextResponse.json({ error: 'Recipient email required.' }, { status: 400 })
+    if (month !== undefined && (typeof month !== 'string' || !MONTH_PATTERN.test(month))) {
+      return NextResponse.json({ error: 'month must use YYYY-MM format.' }, { status: 400 })
+    }
 
     const data = await buildReportData(month)
     const result = await sendTreasurerReport({ to: recipient, data })
