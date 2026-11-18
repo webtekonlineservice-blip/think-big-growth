@@ -1,9 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Camera, CalendarDays, ExternalLink, Loader2, Copy, Check, Pencil, Trash2, Plus, Upload, PartyPopper } from 'lucide-react'
+import { useSearchParams } from 'next/navigation'
+import { Camera, CalendarDays, ExternalLink, Loader2, Copy, Check, Pencil, Trash2, Plus, Upload, PartyPopper, UserPlus } from 'lucide-react'
 import PostEditor, { EditorSeed, MemberLite, PhotoThumb, PostRow, seedFromPost, uploadPhoto } from '@/components/marketing/PostEditor'
 import QuickPost from '@/components/marketing/QuickPost'
+import SeatPost from '@/components/marketing/SeatPost'
 import { SubTabs, useView } from '@/components/marketing/SubTabs'
 import { processImage } from '@/lib/imageUtils'
 import { FACEBOOK_PAGE_URL, LINKEDIN_PROFILE_URL } from '@/lib/socialChannels'
@@ -27,6 +29,9 @@ export default function SocialView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [quick, setQuick] = useState(false)
+  const params = useSearchParams()
+  const seatParam = params.get('seat') || ''
+  const [seatOpen, setSeatOpen] = useState(!!seatParam)
   const [editor, setEditor] = useState<EditorSeed | null>(null)
   const [planning, setPlanning] = useState(false)
   const [planMsg, setPlanMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -151,6 +156,9 @@ export default function SocialView() {
           <button onClick={() => setQuick(true)} className="flex items-center gap-2 bg-brand-blue text-white px-5 py-3 rounded-xl text-sm font-semibold">
             <Camera className="w-4 h-4" /> New post from a photo
           </button>
+          <button onClick={() => setSeatOpen(true)} className="flex items-center gap-2 bg-brand-red/90 hover:bg-brand-red text-white px-4 py-3 rounded-xl text-sm font-semibold">
+            <UserPlus className="w-4 h-4" /> Fill a seat
+          </button>
           <button onClick={() => setEditor({ type: 'welcome', format: 'landscape', title: '' })} className="flex items-center gap-2 border border-gray-600 text-gray-200 px-4 py-3 rounded-xl text-sm">
             <PartyPopper className="w-4 h-4" /> Welcome a member
           </button>
@@ -221,6 +229,7 @@ export default function SocialView() {
       {quick && (
         <QuickPost photos={photos} onClose={() => setQuick(false)} onSaved={loadPosts} onLibraryChanged={loadPhotos} />
       )}
+      {seatOpen && <SeatPost initialSeat={seatParam || undefined} onClose={() => setSeatOpen(false)} onSaved={loadPosts} />}
       {editor && (
         <PostEditor
           seed={editor} members={members} photos={photos}

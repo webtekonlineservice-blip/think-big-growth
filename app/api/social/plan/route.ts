@@ -3,7 +3,7 @@ import { connectDB } from '@/lib/mongodb'
 import Member from '@/lib/models/Member'
 import SpeakerRotation from '@/lib/models/SpeakerRotation'
 import SocialPost, { SocialType, SocialGraphicSpec } from '@/lib/models/SocialPost'
-import { SEAT_ALIASES, isSeatFilledByMembers } from '@/lib/seatAliases'
+import { getOpenSeats } from '@/lib/openSeats'
 import { generateStudioCaption } from '@/lib/socialStudio'
 import { chicagoToday, addDays, nextThursday, shortUpper as prettyDate } from '@/lib/socialDates'
 import { getSession } from '@/lib/auth'
@@ -81,11 +81,7 @@ export async function POST(req: NextRequest) {
     const spotlight = spotlightPool[0] ?? null
 
     // Open seats (not covered by any member's role)
-    const roles = members.map((m) => (m.role || '').trim()).filter(Boolean)
-    const openSeats = Object.keys(SEAT_ALIASES)
-      .filter((s) => s !== 'Tax Consultant')
-      .filter((s) => !isSeatFilledByMembers(s, roles))
-      .slice(0, 8)
+    const openSeats = (await getOpenSeats()).slice(0, 8)
 
     type Item = {
       date: string; type: SocialType; facts: Record<string, string>

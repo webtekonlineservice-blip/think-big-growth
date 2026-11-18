@@ -3,12 +3,12 @@ import mongoose, { Schema, Document, Model } from 'mongoose'
 export type SocialPlatform = 'facebook' | 'linkedin' | 'instagram'
 export type SocialType =
   | 'meeting_promo' | 'speaker' | 'spotlight' | 'visitor_invite' | 'win' | 'open_seats' | 'custom'
-  | 'meeting_day' | 'recap' | 'evergreen' | 'photo' | 'welcome'
+  | 'meeting_day' | 'recap' | 'evergreen' | 'photo' | 'welcome' | 'seat_open'
 export type SocialStatus = 'idea' | 'drafted' | 'scheduled' | 'posted'
 
 export const SOCIAL_TYPES: SocialType[] = [
   'meeting_promo', 'speaker', 'spotlight', 'visitor_invite', 'win', 'open_seats', 'custom',
-  'meeting_day', 'recap', 'evergreen', 'photo', 'welcome',
+  'meeting_day', 'recap', 'evergreen', 'photo', 'welcome', 'seat_open',
 ]
 export const SOCIAL_PLATFORMS: SocialPlatform[] = ['facebook', 'linkedin', 'instagram']
 export const SOCIAL_STATUSES: SocialStatus[] = ['idea', 'drafted', 'scheduled', 'posted']

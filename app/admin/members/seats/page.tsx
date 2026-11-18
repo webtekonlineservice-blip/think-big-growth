@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { POWER_TEAMS } from '@/lib/chapterSeats'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import Link from 'next/link'
 
@@ -8,6 +9,7 @@ const MAX_ACTIVE_SEATS = 5
 
 interface SeatView {
   profession: string
+  team: string
   status: 'filled' | 'active' | 'paused' | 'open'
   outreach_status: 'open' | 'active' | 'paused'
   campaign_id: string | null
@@ -51,6 +53,7 @@ export default function AdminSeatsPage() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [filter, setFilter] = useState<'all' | 'open' | 'active' | 'paused' | 'filled'>('all')
   const [search, setSearch] = useState('')
+  const [team, setTeam] = useState<string>('all')
 
   const fetchSeats = useCallback(async () => {
     const [seatsRes, logsRes] = await Promise.all([
@@ -151,6 +154,7 @@ export default function AdminSeatsPage() {
 
   const filtered = seats.filter((s) => {
     if (filter !== 'all' && s.status !== filter) return false
+    if (team !== 'all' && s.team !== team) return false
     if (search && !s.profession.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
@@ -264,6 +268,35 @@ export default function AdminSeatsPage() {
           ))}
         </div>
 
+        {/* Power teams */}
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-sm font-semibold text-white">Power teams</p>
+            <p className="text-xs text-gray-500">Categories that refer each other the most. Fill one team at a time.</p>
+          </div>
+          <div className="-mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
+            <div className="flex gap-2 w-max">
+              <button onClick={() => setTeam('all')}
+                className={`px-3 py-1.5 rounded-full text-xs border whitespace-nowrap ${team === 'all' ? 'bg-brand-indigo border-brand-indigo text-white' : 'border-gray-700 text-gray-400 hover:text-white'}`}>
+                All teams
+              </button>
+              {POWER_TEAMS.map((t) => {
+                const inTeam = seats.filter((x) => x.team === t.id)
+                const got = inTeam.filter((x) => x.status === 'filled').length
+                return (
+                  <button key={t.id} onClick={() => setTeam(team === t.id ? 'all' : t.id)} title={t.blurb}
+                    className={`px-3 py-1.5 rounded-full text-xs border whitespace-nowrap ${team === t.id ? 'bg-brand-indigo border-brand-indigo text-white' : 'border-gray-700 text-gray-400 hover:text-white'}`}>
+                    {t.id} <span className="opacity-70">{got}/{inTeam.length}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          {team !== 'all' && (
+            <p className="text-xs text-gray-400">{POWER_TEAMS.find((t) => t.id === team)?.blurb}</p>
+          )}
+        </div>
+
         {/* Search + filter */}
         <div className="flex items-center gap-3">
           <input
@@ -280,9 +313,20 @@ export default function AdminSeatsPage() {
           )}
         </div>
 
-        {/* Seats grid */}
+        {/* Seats grid, grouped by power team */}
+        {[...POWER_TEAMS.map((t) => t.id as string), 'Other'].map((teamId) => {
+          const group = filtered.filter((x) => (x.team || 'Other') === teamId)
+          if (group.length === 0) return null
+          const filledHere = seats.filter((x) => x.team === teamId && x.status === 'filled').length
+          const totalHere = seats.filter((x) => x.team === teamId).length
+          return (
+        <section key={teamId} className="space-y-2">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold text-gray-200">{teamId}</h2>
+            <span className="text-xs text-gray-500">{filledHere} of {totalHere} filled</span>
+          </div>
         <div className="grid md:grid-cols-2 gap-3">
-          {filtered.map((seat) => {
+          {group.map((seat) => {
             const cfg = STATUS_CONFIG[seat.status]
             const isToggling = toggling === seat.profession
             const isScraping = scraping === seat.profession
@@ -368,6 +412,10 @@ export default function AdminSeatsPage() {
                         <p className="text-xs text-gray-700 mt-0.5">Never scraped</p>
                       )}
                     </div>
+                    <Link href={`/admin/marketing/social?seat=${encodeURIComponent(seat.profession)}`}
+                      className="text-xs text-brand-red-light hover:text-white transition-colors flex-shrink-0">
+                      Make a post
+                    </Link>
                     {seat.campaign_id && (
                       <button
                         onClick={() => triggerScrape(seat)}
@@ -384,6 +432,9 @@ export default function AdminSeatsPage() {
             )
           })}
         </div>
+        </section>
+          )
+        })}
 
         {filtered.length === 0 && (
           <div className="card text-center py-12">

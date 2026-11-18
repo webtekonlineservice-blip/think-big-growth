@@ -34,7 +34,7 @@ export function seedFromPost(p: PostRow, asCopy = false): EditorSeed {
     title: g?.title ?? '', subtitle: g?.subtitle ?? '',
     role: p.type === 'spotlight' ? (g?.lines?.[0] ?? '') : p.type === 'welcome' ? (g?.lines?.[1] ?? '') : '',
     classification: p.type === 'welcome' ? (g?.lines?.[0] ?? '') : '',
-    seats: p.type === 'open_seats' ? (g?.lines ?? []).join(', ') : '',
+    seats: p.type === 'open_seats' ? (g?.lines ?? []).join(', ') : p.type === 'seat_open' ? (g?.lines ?? []).join(' | ') : '',
     cardLine: g?.caption ?? '', content: asCopy ? '' : p.content,
     wrapper: (g?.wrapper as PhotoWrapper | undefined) ?? 'overlay',
   }
@@ -60,6 +60,7 @@ const KINDS: { id: SocialType; label: string }[] = [
   { id: 'meeting_day', label: 'Meeting day' },
   { id: 'meeting_promo', label: 'Thursday promo' },
   { id: 'visitor_invite', label: 'Guest invite' },
+  { id: 'seat_open', label: 'Open seat' },
   { id: 'open_seats', label: 'Open seats' },
   { id: 'recap', label: 'Recap' },
   { id: 'win', label: 'Win' },
@@ -135,7 +136,7 @@ export default function PostEditor({
     setType(t)
     if (DEFAULT_TITLE[t] && (!title || Object.values(DEFAULT_TITLE).includes(title))) setTitle(DEFAULT_TITLE[t] as string)
     if ((t === 'spotlight' || t === 'speaker' || t === 'welcome') && member) { setTitle(member.name); setSubtitle(member.company); if (t === 'spotlight' || t === 'welcome') setRole(member.role) }
-    if (t === 'welcome') setFormat('landscape')
+    if (t === 'welcome' || t === 'seat_open') setFormat('landscape')
   }
 
   const pickMember = (mid: string) => {
@@ -148,7 +149,7 @@ export default function PostEditor({
     kind: type as GraphicKind,
     title: title || DEFAULT_TITLE[type] || 'Think Big St. Louis',
     subtitle: subtitle || undefined,
-    lines: type === 'welcome' ? [classification, role] : type === 'spotlight' ? (role ? [role] : []) : type === 'open_seats' ? seats.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
+    lines: type === 'seat_open' ? seats.split('|').map((s) => s.trim()).filter(Boolean).slice(0, 3) : type === 'welcome' ? [classification, role] : type === 'spotlight' ? (role ? [role] : []) : type === 'open_seats' ? seats.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
     caption: cardLine || undefined,
     dateLabel: type === 'speaker' ? `THURSDAY · ${shortUpper(nextThursday(date))}` : undefined,
     memberPhoto: effectivePhoto || undefined,
@@ -319,12 +320,12 @@ export default function PostEditor({
                 </div>
               )}
               <div className={type === 'open_seats' || type === 'meeting_day' ? 'sm:col-span-2' : ''}>
-                <label className={LABEL}>{type === 'spotlight' || type === 'speaker' || type === 'welcome' ? 'Name' : 'Headline'}</label>
+                <label className={LABEL}>{type === 'spotlight' || type === 'speaker' || type === 'welcome' ? 'Name' : type === 'seat_open' ? 'Business category' : 'Headline'}</label>
                 <input value={title} onChange={(e) => setTitle(e.target.value)} className={INPUT} />
               </div>
-              {(type === 'spotlight' || type === 'speaker' || type === 'welcome' || type === 'open_seats') && (
+              {(type === 'spotlight' || type === 'speaker' || type === 'welcome' || type === 'open_seats' || type === 'seat_open') && (
                 <div>
-                  <label className={LABEL}>{type === 'open_seats' ? 'Supporting line' : 'Company'}</label>
+                  <label className={LABEL}>{type === 'open_seats' ? 'Supporting line' : type === 'seat_open' ? 'Script line' : 'Company'}</label>
                   <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} className={INPUT} />
                 </div>
               )}
@@ -338,6 +339,12 @@ export default function PostEditor({
                 <div>
                   <label className={LABEL}>Role</label>
                   <input value={role} onChange={(e) => setRole(e.target.value)} className={INPUT} />
+                </div>
+              )}
+              {type === 'seat_open' && (
+                <div className="sm:col-span-2">
+                  <label className={LABEL}>Great fit lines (separate with |)</label>
+                  <input value={seats} onChange={(e) => setSeats(e.target.value)} className={INPUT} placeholder="Established local CPA | Loves helping owners | Ready for Thursdays" />
                 </div>
               )}
               {type === 'open_seats' && (

@@ -1,155 +1,64 @@
 /**
- * Canonical seat names → alias terms.
+ * Seat matching: map a member role or prospect profession to a chapter seat.
  *
- * When checking if a seat is "filled" or matching a profession string to a
- * canonical seat, we test both directions: does the input contain any alias,
- * or does any alias contain the input?
- *
- * Add more aliases here as your chapter's member roles evolve.
+ * Seat names, power teams and alias words live in lib/chapterSeats.ts.
+ * Matching is WHOLE-WORD and picks the most specific (longest) alias, so
+ *   "roofing - residential"          → Roofing
+ *   "property & casualty insurance"  → Insurance Agent (not Property Manager)
+ *   "home cleaning"                  → Home Cleaning   (not Home Inspector)
+ * There is no first-word or loose substring matching.
  */
-export const SEAT_ALIASES: Record<string, string[]> = {
-  'Realtor': [
-    'realtor', 'real estate agent', 'real estate', 'realty', 'real estate broker',
-    'residential real estate', 'commercial real estate',
-  ],
-  'Attorney / Lawyer': [
-    'attorney', 'lawyer', 'law', 'legal', 'estate planning law', 'estate planning',
-    'litigation', 'counsel',
-  ],
-  'Banker': [
-    'banker', 'banking', 'banking services', 'bank', 'commercial banking',
-  ],
-  'Business Coach': [
-    'business coach', 'business consultant', 'business consulting', 'consultant',
-    'coaching', 'executive coach',
-  ],
-  'Chiropractor': [
-    'chiropractor', 'chiropractic', 'chiro',
-  ],
-  'Contractor / Builder': [
-    'contractor', 'builder', 'general contractor', 'construction', 'roofing',
-    'roofing - residential', 'roofing residential', 'roofer', 'remodeling',
-    'renovation',
-  ],
-  'Dentist': [
-    'dentist', 'dental', 'orthodontist', 'orthodontics',
-  ],
-  'Digital Marketing': [
-    'digital marketing', 'seo', 'social media', 'online marketing', 'ppc',
-    'search engine optimization',
-  ],
-  'Financial Advisor': [
-    'financial advisor', 'financial planner', 'wealth management', 'investment advisor',
-    'financial planning', 'advisor',
-  ],
-  'Health & Wellness': [
-    'health & wellness', 'health and wellness', 'wellness', 'health coach',
-    'health & wellness products', 'nutrition', 'holistic health',
-  ],
-  'Home Inspector': [
-    'home inspector', 'home inspection', 'property inspector',
-  ],
-  'Insurance Agent': [
-    'insurance agent', 'insurance', 'insurance broker', 'commercial insurance',
-    'property & casualty insurance', 'property and casualty', 'life insurance',
-    'health insurance', 'auto insurance', 'p&c insurance',
-  ],
-  'IT / Tech Consultant': [
-    'it consultant', 'tech consultant', 'technology consultant', 'it services',
-    'managed it', 'cybersecurity', 'web development', 'software development',
-    'web developer', 'web designer',
-  ],
-  'Landscaper': [
-    'landscaper', 'landscaping', 'lawn care', 'lawn service', 'grounds',
-  ],
-  'Mortgage Broker': [
-    'mortgage broker', 'mortgage', 'home loans', 'mortgage lender', 'loan officer',
-    'residential mortgages', 'residential mortgage', 'home mortgage',
-  ],
-  'Photographer': [
-    'photographer', 'photography', 'photo', 'videographer', 'video production',
-  ],
-  'Physical Therapist': [
-    'physical therapist', 'physical therapy', 'pt', 'physiotherapy',
-  ],
-  'Property Manager': [
-    'property manager', 'property management', 'property management company',
-  ],
-  'Recruiter': [
-    'recruiter', 'recruiting', 'staffing', 'headhunter', 'talent acquisition',
-    'hr consultant', 'human resources',
-  ],
-  'Solar / Energy': [
-    'solar', 'solar energy', 'renewable energy', 'energy consultant',
-  ],
-  'Tax Consultant': [
-    'tax consultant', 'tax advisor', 'tax preparation', 'tax preparer', 'cpa',
-    'accountant', 'accounting',
-  ],
-  'Accountant / CPA': [
-    'accountant', 'cpa', 'accounting', 'bookkeeper', 'bookkeeping',
-    'certified public accountant',
-  ],
-  'Web Designer / Developer': [
-    'web designer', 'web developer', 'web development', 'website designer',
-    'website developer', 'front end developer', 'full stack developer',
-  ],
+import { SEAT_DEFS } from '@/lib/chapterSeats'
+
+/** Lowercase, "&" → "and", punctuation → spaces, single-spaced. */
+function norm(s: string): string {
+  return ` ${(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim()} `
 }
 
+/** Canonical seat name → alias terms (derived; kept for existing callers). */
+export const SEAT_ALIASES: Record<string, string[]> = Object.fromEntries(
+  SEAT_DEFS.map((s) => [s.name, s.aliases])
+)
+
+// Broad words that only decide the seat when nothing more specific is present,
+// e.g. "Painter/Contractor" is a Painter, "Contractor" alone is Contractor / Builder.
+const GENERIC = new Set(['contractor', 'builder', 'construction', 'marketing', 'insurance', 'law', 'video', 'promotional', 'moving', 'entertainment', 'venue', 'fitness', 'wellness', 'bank'].map((w) => norm(w)))
+
+// Every (seat, phrase) pair: specific phrases first (longest first), generic words last.
+const PHRASES: { seat: string; phrase: string }[] = SEAT_DEFS
+  .flatMap((s) => [s.name, ...s.name.split('/'), ...s.aliases].map((p) => ({ seat: s.name, phrase: norm(p) })))
+  .filter((x) => x.phrase.trim().length > 0)
+  .sort((a, b) => {
+    const ga = GENERIC.has(a.phrase) ? 1 : 0
+    const gb = GENERIC.has(b.phrase) ? 1 : 0
+    return ga !== gb ? ga - gb : b.phrase.length - a.phrase.length
+  })
+
 /**
- * Given any profession string (e.g. from a member role or prospect field),
- * return the canonical seat name from ALL_SEATS, or null if no match found.
+ * Return the seat a profession string belongs to, or null.
+ * e.g. "Residential Mortgages" → "Mortgage Broker".
  */
 export function canonicalizeProfession(input: string): string | null {
   if (!input) return null
-  const lower = input.toLowerCase().trim()
-
-  for (const [canonical, aliases] of Object.entries(SEAT_ALIASES)) {
-    // Direct match against canonical name
-    if (canonical.toLowerCase() === lower) return canonical
-
-    // Alias match
-    for (const alias of aliases) {
-      if (lower.includes(alias) || alias.includes(lower)) return canonical
-    }
+  const text = norm(input)
+  if (!text.trim()) return null
+  for (const { seat, phrase } of PHRASES) {
+    if (text.includes(phrase)) return seat
   }
-
   return null
 }
 
-/**
- * Returns true if a given profession string matches a canonical seat,
- * considering all known aliases. Used in the seat-filled guard.
- */
+/** True if a profession/role and a seat (or another role) belong to the same seat. */
 export function professionMatchesSeat(profession: string, seatName: string): boolean {
   if (!profession || !seatName) return false
-  const p = profession.toLowerCase().trim()
-  const s = seatName.toLowerCase().trim()
-
-  // Direct substring match (original behavior)
-  if (p.includes(s) || s.includes(p)) return true
-  // First-word match (original behavior)
-  if (p.split(' ')[0] === s.split(' ')[0]) return true
-
-  // Alias-aware match
-  const canonicalFromProfession = canonicalizeProfession(profession)
-  const canonicalFromSeat = canonicalizeProfession(seatName)
-  if (canonicalFromProfession && canonicalFromSeat) {
-    return canonicalFromProfession === canonicalFromSeat
-  }
-  if (canonicalFromProfession && canonicalFromProfession.toLowerCase() === s) return true
-  if (canonicalFromSeat && canonicalFromSeat.toLowerCase() === p) return true
-
-  return false
+  const a = canonicalizeProfession(profession)
+  const b = canonicalizeProfession(seatName)
+  if (a && b) return a === b
+  // Neither maps to a known seat: only an exact match counts.
+  return norm(profession) === norm(seatName)
 }
 
-/**
- * Given a list of filled member roles, returns true if the given seat/profession
- * is already covered by a member — using full alias-aware matching.
- */
-export function isSeatFilledByMembers(
-  profession: string,
-  filledRoles: string[]
-): boolean {
+/** True if any current member role covers this seat/profession. */
+export function isSeatFilledByMembers(profession: string, filledRoles: string[]): boolean {
   return filledRoles.some((role) => professionMatchesSeat(profession, role))
 }

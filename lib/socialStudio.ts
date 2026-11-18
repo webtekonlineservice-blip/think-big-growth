@@ -30,6 +30,7 @@ const PLATFORM_TONE: Record<SocialPlatform, string> = {
 const TYPE_BRIEF: Record<SocialType, string> = {
   meeting_promo: "Invite local business owners to this week's meeting. Convey momentum.",
   speaker: "Preview this week's featured speaker and give people a reason to come hear them.",
+  seat_open: 'Invite local owners in an open business category to visit and join the chapter. Membership in a referral group, never a job.',
   welcome: 'Welcome a brand-new member to the chapter. Say who they are and what they do, and ask members and readers to reach out and send them business. Warm and celebratory.',
   spotlight: 'Introduce a member: who they are, what they do, and who their ideal referral is. Make readers want to refer or use them.',
   visitor_invite: 'Invite prospective guests. Lower the barrier: it is free to visit and no-pressure.',
@@ -64,6 +65,7 @@ export function assemble(body: string, platform: SocialPlatform): string {
 const FALLBACK_HEADLINE: Record<SocialType, string> = {
   meeting_promo: 'Thursday, 11:30. Come see it.',
   speaker: 'Hear it live this Thursday.',
+  seat_open: 'Your seat is open.',
   welcome: 'Welcome to Think Big.',
   spotlight: 'Meet a Think Big member.',
   visitor_invite: 'You are invited.',
@@ -156,61 +158,201 @@ export interface QuickPostOutput {
   cardLine: string
   facebook: string    // chapter voice ("we"), locked blocks + hashtags appended
   linkedin: string    // Patrick's voice ("I"), locked blocks + hashtags appended
+  angle?: string
+}
+export interface QuickPostResult extends QuickPostOutput {
+  options: QuickPostOutput[]
+}
+
+export type PostTone = 'witty' | 'heartfelt' | 'direct'
+export const POST_TONES: { id: PostTone; label: string }[] = [
+  { id: 'witty', label: 'Witty' },
+  { id: 'heartfelt', label: 'Heartfelt' },
+  { id: 'direct', label: 'Direct' },
+]
+const TONE_RULES: Record<PostTone, string> = {
+  witty: 'Tone: witty and playful. Clever wordplay, a light joke or a surprising comparison. Smart, never corny, never mean.',
+  heartfelt: 'Tone: heartfelt and warm. Gratitude, community, real human connection. Sincere, not sappy.',
+  direct: 'Tone: direct and confident. Short sentences, clear value, a strong call to action. No fluff.',
+}
+
+/** Creative angles. Each option gets a different one so the three never read alike. */
+const ANGLES = [
+  'Behind the scenes: what the moment actually looks and feels like from inside the room.',
+  'Myth-buster: open by gently knocking down a misconception about networking or BNI, then the truth.',
+  'Question first: open with a question the reader will answer in their head.',
+  'Hot take: a bold one-line opinion about doing business locally, then back it up.',
+  'Referral math: show how one introduction can turn into ongoing business (general logic only, no invented numbers).',
+  'Tiny story: tell it as a short moment with a beginning and an end, using only the facts given.',
+  'Listicle in miniature: three quick, punchy lines.',
+  'Neighbor voice: talk like a local who loves Kirkwood and St. Louis businesses.',
+]
+
+function pickAngles(n: number): string[] {
+  const pool = ANGLES.slice()
+  const out: string[] = []
+  while (out.length < n && pool.length) out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0])
+  return out
+}
+
+const BASE_RULES = [
+  'Use ONLY the facts given. Never invent numbers, names, companies, results, quotes, testimonials or events. If the facts are thin, write less, not more.',
+  'FACEBOOK post: the chapter speaking as "we". 2 short paragraphs, a few tasteful emojis.',
+  'LINKEDIN post: Patrick Driscoll speaking as "I". He is a member of the chapter and runs Webtek. Professional but personal, 2 short paragraphs, minimal emojis, one takeaway for business owners. Claim nothing about Patrick beyond being a chapter member.',
+  'DO NOT include the meeting day/time/location, any Webtek credit line, or hashtags. Those are added automatically.',
+  'Avoid cliches: "game-changer", "unlock", "elevate", "synergy", "in today\'s fast-paced world", "look no further".',
+]
+
+async function deepseekJson(system: string, user: string, temperature = 0.95, maxTokens = 2200): Promise<Record<string, unknown>> {
+  const apiKey = process.env.DEEPSEEK_API_KEY
+  if (!apiKey) throw new Error('DEEPSEEK_API_KEY is not set.')
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'deepseek-chat', temperature, max_tokens: maxTokens,
+      response_format: { type: 'json_object' },
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+    }),
+  })
+  if (!res.ok) throw new Error(`DeepSeek ${res.status}`)
+  const data = await res.json()
+  return JSON.parse(data?.choices?.[0]?.message?.content ?? '{}')
+}
+
+function avoidBlock(recent: string[]): string {
+  const avoid = recent.slice(0, 10).map((r) => `- ${r.split('\n')[0].slice(0, 110)}`).join('\n')
+  return avoid ? `Recent posts. Do NOT reuse their openings or phrasing:\n${avoid}` : ''
 }
 
 /**
- * Write both platform posts from a single subject typed on a phone.
- * The writer may only use what the subject says: no invented numbers,
- * names, outcomes or quotes.
+ * Write three takes on one subject, each with a different creative angle,
+ * in the chosen tone. The first option is also returned at the top level.
  */
-export async function generateQuickPost(subject: string, recent: string[] = []): Promise<QuickPostOutput> {
+export async function generateQuickPost(subject: string, recent: string[] = [], tone: PostTone = 'witty'): Promise<QuickPostResult> {
   const clean = subject.trim().slice(0, 600)
-  const fallbackBody = clean.endsWith('.') || clean.endsWith('!') || clean.endsWith('?') ? clean : `${clean}.`
-  const fallback: QuickPostOutput = {
+  const fallbackBody = /[.!?]$/.test(clean) ? clean : `${clean}.`
+  const fb: QuickPostOutput = {
     headline: clean.length <= 40 ? clean : 'Thursday at Think Big',
     cardLine: clean.slice(0, 120),
     facebook: assemble(fallbackBody, 'facebook'),
     linkedin: assemble(fallbackBody, 'linkedin'),
   }
+  const angles = pickAngles(3)
   try {
-    const apiKey = process.env.DEEPSEEK_API_KEY
-    if (!apiKey) throw new Error('DEEPSEEK_API_KEY is not set.')
-
-    const avoid = recent.slice(0, 10).map((r) => `- ${r.split('\n')[0].slice(0, 110)}`).join('\n')
     const system = [
-      `You write two social posts from one subject for ${CHAPTER_NAME}, a BNI referral-networking chapter in Kirkwood, MO.`,
-      'The subject was typed quickly on a phone. Use ONLY what it says. Never invent numbers, names, companies, results, quotes or events that are not in it. If it is thin, write less, not more.',
-      'FACEBOOK post: the chapter speaking as "we". Warm, neighborly, 2 short paragraphs, a few tasteful emojis.',
-      'LINKEDIN post: Patrick Driscoll speaking as "I". He is a member of the chapter and runs Webtek. Professional but personal, 2 short paragraphs, minimal emojis, a takeaway for business owners. Do not claim anything about Patrick beyond being a chapter member.',
-      'DO NOT include the meeting day/time/location, any Webtek credit line, or hashtags. Those are added automatically.',
-      'Return STRICT JSON: {"headline": "<fresh headline under 40 characters for the image>", "card_line": "<one sentence under 110 characters for the image>", "facebook": "<post body>", "linkedin": "<post body>"}',
+      `You write social posts for ${CHAPTER_NAME}, a BNI referral-networking chapter in Kirkwood, MO.`,
+      'The subject was typed quickly on a phone.',
+      ...BASE_RULES,
+      TONE_RULES[tone],
+      'Write THREE different options. Each option must follow its assigned angle and open differently from the others.',
+      'Return STRICT JSON: {"options": [{"headline": "<under 40 characters, for the image>", "card_line": "<one sentence under 110 characters, for the image>", "facebook": "<post body>", "linkedin": "<post body>"}, ... x3]}',
     ].join('\n')
     const user = [
       `Subject: ${clean}`,
-      avoid ? `Recent posts. Do NOT reuse their openings or phrasing:\n${avoid}` : '',
+      angles.map((a, i) => `Option ${i + 1} angle: ${a}`).join('\n'),
+      avoidBlock(recent),
     ].filter(Boolean).join('\n\n')
-
-    const res = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'deepseek-chat', temperature: 0.9, max_tokens: 900,
-        response_format: { type: 'json_object' },
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-      }),
-    })
-    if (!res.ok) throw new Error(`DeepSeek ${res.status}`)
-    const data = await res.json()
-    const p = JSON.parse(data?.choices?.[0]?.message?.content ?? '{}') as { headline?: string; card_line?: string; facebook?: string; linkedin?: string }
-    if (!p.facebook?.trim() || !p.linkedin?.trim()) throw new Error('Empty post')
-    return {
-      headline: (p.headline || fallback.headline).trim().slice(0, 44),
-      cardLine: (p.card_line || clean).trim().slice(0, 120),
-      facebook: assemble(p.facebook, 'facebook'),
-      linkedin: assemble(p.linkedin, 'linkedin'),
-    }
+    const p = await deepseekJson(system, user)
+    const raw = Array.isArray(p.options) ? (p.options as Record<string, string>[]) : []
+    const options = raw
+      .filter((o) => o && o.facebook?.trim() && o.linkedin?.trim())
+      .slice(0, 3)
+      .map((o, i) => ({
+        headline: (o.headline || fb.headline).trim().slice(0, 44),
+        cardLine: (o.card_line || clean).trim().slice(0, 120),
+        facebook: assemble(o.facebook, 'facebook'),
+        linkedin: assemble(o.linkedin, 'linkedin'),
+        angle: angles[i]?.split(':')[0] ?? '',
+      }))
+    if (!options.length) throw new Error('Empty options')
+    return { ...options[0], options }
   } catch (err) {
     console.error('generateQuickPost fell back to the subject text:', err instanceof Error ? err.message : err)
-    return fallback
+    return { ...fb, options: [fb] }
+  }
+}
+
+// ─── Open seat: invite a new member for an open business category ──────────
+
+export interface SeatPostOption {
+  headline: string          // e.g. "Calling all St. Louis CPAs"
+  tagline: string           // script line on the image, under 34 chars
+  lookingFor: string[]      // 3 short lines describing a great fit, each under 40 chars
+  facebook: string
+  linkedin: string
+  angle?: string
+}
+export interface SeatPostResult { seat: string; options: SeatPostOption[] }
+
+/** Facts about every seat that are always true. The model may use these and nothing else. */
+const SEAT_FACTS = [
+  'Think Big St. Louis is a BNI chapter: local business owners who meet weekly and refer business to each other.',
+  'Each business category has exactly one seat, so the member who holds it is the only one from that field in the group.',
+  'Members give a short weekly introduction about their business and pass referrals to each other.',
+  'Guests can visit a meeting for free with no commitment.',
+]
+
+function seatFallback(seat: string): SeatPostOption {
+  return {
+    headline: `Seat open: ${seat}`.slice(0, 40),
+    tagline: 'Your referral partners are waiting.',
+    lookingFor: [`An established local ${seat}`, 'Someone who loves helping others', 'Ready to show up every Thursday'],
+    facebook: assemble(`Our ${seat} seat is open. In BNI each business category has one seat, so the ${seat} who joins is the only one in the room when referrals get passed. Know someone great? Tag them, or come visit as our guest. It's free.`, 'facebook'),
+    linkedin: assemble(`Our BNI chapter has an open seat for a ${seat}. Each category has exactly one seat, so the person who takes it is the only ${seat} our members refer. If that's you, or someone you trust, I'd be glad to have you visit as my guest.`, 'linkedin'),
+  }
+}
+
+/**
+ * Three takes on recruiting a new member for one open business category.
+ * This is membership, not employment: no hiring, job, salary or "apply" language.
+ */
+export async function generateSeatPost(seat: string, recent: string[] = [], tone: PostTone = 'witty', note = ''): Promise<SeatPostResult> {
+  const cleanSeat = seat.trim().slice(0, 60)
+  const angles = pickAngles(3)
+  try {
+    const system = [
+      `You write posts that invite a local business owner to join ${CHAPTER_NAME}, a BNI referral-networking chapter in Kirkwood, MO, in a business category whose seat is open.`,
+      'This is MEMBERSHIP in a referral group, NOT a job. Never use the words hiring, hire, job, position, role opening, apply, applicant, candidate, salary, pay, perks or benefits package. Nobody is being employed.',
+      'Speak to owners and professionals in that field, and to readers who might know one. Make it appealing to be the only one from that category in the group.',
+      'Never promise or guarantee referrals, volume, income or results. Do not say they would get "every" or "all" referrals. Say members refer each other and the seat is exclusive, and let the reader imagine the rest.',
+      ...BASE_RULES,
+      TONE_RULES[tone],
+      `True facts you may use:\n- ${SEAT_FACTS.join('\n- ')}`,
+      'End by inviting readers to tag a great local professional in that field, or to visit as a guest.',
+      'Write THREE different options, each following its assigned angle.',
+      'For each option also write, for the image: "headline" (under 32 characters, e.g. "Calling all local CPAs"), "tagline" (under 30 characters, warm or clever), and "looking_for": exactly 3 short lines describing who would be a great fit for the seat, each under 36 characters (e.g. "Loves helping small businesses"). These describe the kind of member, not job requirements.',
+      'Return STRICT JSON: {"options": [{"headline": "", "tagline": "", "looking_for": ["", "", ""], "facebook": "", "linkedin": ""}, ... x3]}',
+    ].join('\n')
+    const user = [
+      `Open seat (business category): ${cleanSeat}`,
+      note.trim() ? `Extra facts from the chapter (true, may use): ${note.trim().slice(0, 300)}` : '',
+      angles.map((a, i) => `Option ${i + 1} angle: ${a}`).join('\n'),
+      avoidBlock(recent),
+    ].filter(Boolean).join('\n\n')
+    const p = await deepseekJson(system, user)
+    const raw = Array.isArray(p.options) ? (p.options as Record<string, unknown>[]) : []
+    const fb = seatFallback(cleanSeat)
+    const banned = /\b(hiring|hire|job|salary|apply|applicant|candidate)\b/i
+    const options = raw
+      .filter((o) => typeof o?.facebook === 'string' && typeof o?.linkedin === 'string')
+      .filter((o) => !banned.test(`${o.facebook} ${o.linkedin} ${o.headline ?? ''} ${o.tagline ?? ''}`))
+      .slice(0, 3)
+      .map((o, i) => {
+        const lf = Array.isArray(o.looking_for) ? (o.looking_for as unknown[]).map((r) => String(r).trim()).filter(Boolean).slice(0, 3) : []
+        return {
+          headline: String(o.headline || fb.headline).trim().slice(0, 40),
+          tagline: String(o.tagline || fb.tagline).trim().slice(0, 34),
+          lookingFor: lf.length === 3 ? lf.map((r) => r.slice(0, 42)) : fb.lookingFor,
+          facebook: assemble(String(o.facebook), 'facebook'),
+          linkedin: assemble(String(o.linkedin), 'linkedin'),
+          angle: angles[i]?.split(':')[0] ?? '',
+        }
+      })
+    if (!options.length) throw new Error('No usable options')
+    return { seat: cleanSeat, options }
+  } catch (err) {
+    console.error('generateSeatPost fell back to template:', err instanceof Error ? err.message : err)
+    return { seat: cleanSeat, options: [seatFallback(cleanSeat)] }
   }
 }

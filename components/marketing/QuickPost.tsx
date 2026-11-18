@@ -19,6 +19,13 @@ const CHIPS = [
 const INPUT = 'w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-blue/50'
 
 type Step = 'photo' | 'subject' | 'review'
+type Tone = 'witty' | 'heartfelt' | 'direct'
+interface Option { headline: string; cardLine: string; facebook: string; linkedin: string; angle?: string }
+const TONES: { id: Tone; label: string }[] = [
+  { id: 'witty', label: '😄 Witty' },
+  { id: 'heartfelt', label: '❤️ Heartfelt' },
+  { id: 'direct', label: '🎯 Direct' },
+]
 type Platform = 'facebook' | 'linkedin'
 
 export default function QuickPost({
@@ -42,6 +49,9 @@ export default function QuickPost({
   const [facebook, setFacebook] = useState('')
   const [linkedin, setLinkedin] = useState('')
   const [tab, setTab] = useState<Platform>('facebook')
+  const [tone, setTone] = useState<Tone>('witty')
+  const [options, setOptions] = useState<Option[]>([])
+  const [pick, setPick] = useState(0)
   const [busy, setBusy] = useState('')
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [copied, setCopied] = useState(false)
@@ -93,14 +103,21 @@ export default function QuickPost({
     try {
       const res = await fetch('/api/social/quick', {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject }),
+        body: JSON.stringify({ subject, tone }),
       })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error || 'Could not write the posts.')
-      setHeadline(d.headline); setCardLine(d.cardLine); setFacebook(d.facebook); setLinkedin(d.linkedin)
+      const opts: Option[] = Array.isArray(d.options) && d.options.length ? d.options : [d]
+      setOptions(opts); applyOption(opts, 0)
       setStep('review'); setSaved(false)
     } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not write the posts.' }) }
     finally { setBusy('') }
+  }
+
+  const applyOption = (opts: Option[], i: number) => {
+    const o = opts[i]
+    if (!o) return
+    setPick(i); setHeadline(o.headline); setCardLine(o.cardLine); setFacebook(o.facebook); setLinkedin(o.linkedin); setSaved(false)
   }
 
   // ── output ──
@@ -217,7 +234,14 @@ export default function QuickPost({
                   className="px-3 py-1.5 rounded-full text-xs border border-gray-700 text-gray-400 hover:text-white">{c.trim()}</button>
               ))}
             </div>
-            <p className="text-[11px] text-gray-600">The writer only uses facts you give it here. Meeting details and the Webtek credit are added automatically.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-gray-500">Tone</span>
+              {TONES.map((t) => (
+                <button key={t.id} onClick={() => setTone(t.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs border ${tone === t.id ? 'bg-brand-blue border-brand-blue text-white' : 'border-gray-700 text-gray-400'}`}>{t.label}</button>
+              ))}
+            </div>
+            <p className="text-[11px] text-gray-600">You get 3 different takes. The writer only uses facts you give it here. Meeting details and the Webtek credit are added automatically.</p>
             <div className="flex gap-2">
               <button onClick={() => setStep('photo')} className="border border-gray-700 text-gray-300 px-4 py-3 rounded-xl text-sm">Back</button>
               <button onClick={write} disabled={busy === 'write'} className="flex-1 flex items-center justify-center gap-2 bg-brand-blue text-white py-3 rounded-xl text-sm font-semibold disabled:opacity-50">
@@ -230,6 +254,16 @@ export default function QuickPost({
         {/* ── Step 3 ── */}
         {step === 'review' && (
           <div className="space-y-4">
+            {options.length > 1 && (
+              <div className="flex flex-wrap gap-2">
+                {options.map((o, i) => (
+                  <button key={i} onClick={() => applyOption(options, i)}
+                    className={`px-3 py-1.5 rounded-full text-xs border ${pick === i ? 'bg-brand-blue border-brand-blue text-white' : 'border-gray-700 text-gray-400'}`}>
+                    Option {i + 1}{o.angle ? ` · ${o.angle}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-2">
               {PHOTO_WRAPPERS.map((w) => (
                 <button key={w.id} onClick={() => setWrapper(w.id)}

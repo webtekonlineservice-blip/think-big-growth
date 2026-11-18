@@ -16,7 +16,7 @@ import { useEffect, useRef, useState } from 'react'
 
 export type GraphicKind =
   | 'open_seats' | 'speaker' | 'spotlight' | 'meeting_promo' | 'visitor_invite' | 'win'
-  | 'meeting_day' | 'recap' | 'evergreen' | 'photo' | 'welcome' | 'custom'
+  | 'meeting_day' | 'recap' | 'evergreen' | 'photo' | 'welcome' | 'seat_open' | 'custom'
 
 export type GraphicFormat = 'square' | 'portrait' | 'landscape'
 
@@ -79,6 +79,7 @@ const EYEBROW: Record<GraphicKind, string> = {
   evergreen: 'WHY REFERRALS WORK',
   photo: 'THINK BIG ST. LOUIS',
   welcome: 'NEW MEMBER',
+  seat_open: 'SEAT OPEN',
   custom: 'THINK BIG ST. LOUIS',
 }
 
@@ -94,6 +95,7 @@ const DEFAULT_CTA: Record<GraphicKind, string> = {
   evergreen: 'Visit us this Thursday →',
   photo: 'Visit us this Thursday →',
   welcome: 'Reach out and welcome them →',
+  seat_open: 'Visit free this Thursday →',
   custom: 'Visit Think Big →',
 }
 
@@ -729,7 +731,9 @@ function drawPhotoOverlay(ctx: Ctx, W: number, H: number, d: GraphicData, photo:
 }
 
 
-// ─── Welcome new member (landscape 1536×1024) ───────────────────────────────
+// ─── Chapter poster family (landscape 1536×1024) ────────────────────────────
+// Red/charcoal swoosh layout from the chapter's "Welcome Kelley" design.
+// Shared frame: swoosh, BNI mark, badge, Webtek credit, footer band.
 
 const W_RED = '#b30f1e'
 const W_DARK = '#202327'
@@ -737,24 +741,15 @@ const W_FONT = "'Roboto Condensed', Arial, Helvetica, sans-serif"
 const W_SCRIPT = "'Kaushan Script', cursive"
 const wf = (weight: number, px: number, italic = false) => `${italic ? 'italic ' : ''}${weight} ${px}px ${W_FONT}`
 
-function drawWelcome(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTMLImageElement | null, webtek: HTMLImageElement | null) {
-  const name = (d.title || 'New Member').trim()
-  const first = name.split(/\s+/)[0] || 'our newest member'
-  const company = (d.subtitle || '').trim()
-  const classification = (d.lines?.[0] || '').trim()
-  const role = (d.lines?.[1] || '').trim()
+function posterBase(ctx: Ctx, W: number, H: number) {
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
-
-  // background + swoosh
   ctx.fillStyle = '#f3f3f3'
   ctx.fillRect(0, 0, W, H)
   ctx.fillStyle = W_RED
   ctx.fill(new Path2D('M1150 0 L1536 0 L1536 1024 L900 1024 C840 700 880 300 1150 0 Z'))
   ctx.fillStyle = W_DARK
   ctx.fill(new Path2D('M1190 0 L1536 0 L1536 1024 L960 1024 C890 700 940 300 1190 0 Z'))
-
-  // BNI + chapter
   setSpacing(ctx, -4)
   ctx.fillStyle = W_RED
   ctx.font = wf(900, 112, true)
@@ -764,96 +759,178 @@ function drawWelcome(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTML
   ctx.font = wf(700, 42)
   ctx.fillText('THINK BIG', 40, 164)
   ctx.fillText('ST. LOUIS', 40, 210)
-
-  // WELCOME
   setSpacing(ctx, 0)
-  ctx.fillStyle = '#111'
-  ctx.font = wf(900, 158)
-  ctx.fillText('WELCOME', 40, 344)
+}
 
-  // OUR NEW MEMBER with rules
+/** Big black word under the chapter name, e.g. WELCOME / SEAT OPEN. */
+function posterTitle(ctx: Ctx, text: string) {
+  ctx.fillStyle = '#111'
+  ctx.font = wf(900, fitLine(ctx, text, 900, 770, 158, 90))
+  ctx.fillText(text, 40, 344)
+}
+
+/** Centered label with rules on both sides, e.g. "OUR NEW MEMBER". */
+function posterRuleLabel(ctx: Ctx, label: string) {
   setSpacing(ctx, 2)
   ctx.font = wf(700, 46)
   ctx.fillStyle = '#444'
-  const label = 'OUR NEW MEMBER'
   const lw = ctx.measureText(label).width
-  const cx = 40 + 380
+  const cx = 420
   ctx.textAlign = 'center'
   ctx.fillText(label, cx, 418)
   ctx.textAlign = 'left'
-  ctx.fillRect(40, 400, cx - lw / 2 - 20 - 40, 3)
-  ctx.fillRect(cx + lw / 2 + 20, 400, 800 - (cx + lw / 2 + 20), 3)
-
-  // name (shrinks to stay clear of the swoosh)
+  ctx.fillRect(40, 400, Math.max(0, cx - lw / 2 - 60), 3)
+  ctx.fillRect(cx + lw / 2 + 20, 400, Math.max(0, 800 - (cx + lw / 2 + 20)), 3)
   setSpacing(ctx, 0)
+}
+
+/** Big red line (name or seat) that shrinks to stay clear of the swoosh. */
+function posterRedLine(ctx: Ctx, text: string) {
   ctx.fillStyle = W_RED
-  const nameUp = name.toUpperCase()
   let px = 122
-  for (; px > 60; px -= 2) { ctx.font = wf(900, px); if (ctx.measureText(nameUp).width <= 800) break }
-  ctx.fillText(nameUp, 40, 430 + px * 0.84 + (122 - px) * 0.1)
+  for (; px > 56; px -= 2) { ctx.font = wf(900, px); if (ctx.measureText(text).width <= 800) break }
+  ctx.fillText(text, 40, 430 + px * 0.84 + (122 - px) * 0.1)
+}
 
-  // company (script)
+function posterScript(ctx: Ctx, text: string) {
+  if (!text) return
   ctx.fillStyle = '#333'
-  let cpx = 76
-  for (; cpx > 36; cpx -= 2) { ctx.font = `${cpx}px ${W_SCRIPT}`; if (ctx.measureText(company).width <= 780) break }
-  if (company) ctx.fillText(company, 44, 622)
+  let px = 76
+  for (; px > 36; px -= 2) { ctx.font = `${px}px ${W_SCRIPT}`; if (ctx.measureText(text).width <= 780) break }
+  ctx.fillText(text, 44, 622)
+}
 
-  // info box
-  rr(ctx, 41.5, 691.5, 767, 223, 18)
-  ctx.fillStyle = WHITE; ctx.fill()
-  ctx.lineWidth = 3; ctx.strokeStyle = '#222'; ctx.stroke()
-  ctx.save()
-  rr(ctx, 41.5, 691.5, 767, 223, 18); ctx.clip()
-  // column 1
-  setSpacing(ctx, 1)
-  ctx.fillStyle = W_RED; ctx.font = wf(900, 26)
-  ctx.fillText('CLASSIFICATION', 67, 735)
-  setSpacing(ctx, 0)
-  ctx.fillStyle = '#111'
-  const cl = classification || 'Business Owner'
-  const clPx = fitLine(ctx, cl, 900, 340, 36, 24)
-  ctx.font = wf(900, clPx)
-  ctx.fillText(cl, 67, 772)
-  if (role) {
-    ctx.fillStyle = '#333'
-    const rp = fitLine(ctx, role, 700, 340, 28, 18)
-    ctx.font = wf(700, rp)
-    ctx.fillText(role, 67, 806)
-  }
-  // divider
-  ctx.fillStyle = '#222'; ctx.fillRect(423, 712, 3, 133)
-  // column 2
-  setSpacing(ctx, 1)
-  ctx.fillStyle = W_RED; ctx.font = wf(900, 26)
-  ctx.fillText('LEADERSHIP & SUPPORT', 451, 735)
-  ctx.fillText('TEAM', 451, 765)
-  setSpacing(ctx, 0)
-  ctx.fillStyle = '#111'; ctx.font = wf(900, 32)
-  drawWrapped(ctx, `Reach out and welcome ${first} personally!`, 451, 800, 335, 36, 2)
-  // black pill
-  rr(ctx, 67, 859, 716, 62, 12); ctx.fillStyle = '#111'; ctx.fill()
-  ctx.fillStyle = WHITE; ctx.textAlign = 'center'
-  const pillText = `Welcome to the chapter, ${first}!`
-  ctx.font = wf(700, fitLine(ctx, pillText, 700, 680, 38, 22))
-  ctx.fillText(pillText, 425, 903 - 10)
-  ctx.textAlign = 'left'
-  ctx.restore()
-
-  // NEW MEMBER ALERT badge
+function posterBadge(ctx: Ctx, l1: string, l2: string, icon: 'house' | 'join') {
   ctx.beginPath(); ctx.arc(960, 180, 140, 0, Math.PI * 2); ctx.fillStyle = WHITE; ctx.fill()
   ctx.beginPath(); ctx.arc(960, 180, 132, 0, Math.PI * 2); ctx.fillStyle = W_RED; ctx.fill()
   ctx.save()
   ctx.translate(918, 98)
   ctx.strokeStyle = WHITE; ctx.lineWidth = 6; ctx.lineJoin = 'round'; ctx.lineCap = 'round'
-  ctx.stroke(new Path2D('M8 38 L42 8 L76 38 M16 32 V68 H68 V32'))
-  ctx.fillStyle = WHITE; ctx.fillRect(34, 42, 16, 26)
+  if (icon === 'house') {
+    ctx.stroke(new Path2D('M8 38 L42 8 L76 38 M16 32 V68 H68 V32'))
+    ctx.fillStyle = WHITE; ctx.fillRect(34, 42, 16, 26)
+  } else {
+    // person + plus: "join us"
+    ctx.fillStyle = WHITE
+    ctx.beginPath(); ctx.arc(34, 22, 13, 0, Math.PI * 2); ctx.fill()
+    ctx.fill(new Path2D('M8 68 C8 44 60 44 60 68 Z'))
+    ctx.stroke(new Path2D('M70 22 V46 M58 34 H82'))
+  }
   ctx.restore()
-  ctx.fillStyle = WHITE; ctx.textAlign = 'center'; ctx.font = wf(900, 36)
-  ctx.fillText('NEW MEMBER', 960, 216)
-  ctx.fillText('ALERT!', 960, 256)
+  ctx.fillStyle = WHITE; ctx.textAlign = 'center'
+  ctx.font = wf(900, fitLine(ctx, l1, 900, 236, 36, 24))
+  ctx.fillText(l1, 960, 216)
+  ctx.font = wf(900, fitLine(ctx, l2, 900, 236, 36, 24))
+  ctx.fillText(l2, 960, 256)
   ctx.textAlign = 'left'
+}
 
-  // photo circle
+/** White box with two columns and a black pill (bottom left). */
+function posterBox(ctx: Ctx, draw: () => void, pill: string) {
+  rr(ctx, 41.5, 691.5, 767, 223, 18)
+  ctx.fillStyle = WHITE; ctx.fill()
+  ctx.lineWidth = 3; ctx.strokeStyle = '#222'; ctx.stroke()
+  ctx.save()
+  rr(ctx, 41.5, 691.5, 767, 223, 18); ctx.clip()
+  draw()
+  ctx.fillStyle = '#222'; ctx.fillRect(423, 712, 3, 133)
+  rr(ctx, 67, 859, 716, 44, 12); ctx.fillStyle = '#111'; ctx.fill()
+  ctx.fillStyle = WHITE; ctx.textAlign = 'center'
+  ctx.font = wf(700, fitLine(ctx, pill, 700, 680, 32, 20))
+  ctx.fillText(pill, 425, 892)
+  ctx.textAlign = 'left'
+  ctx.restore()
+}
+
+function posterColLabel(ctx: Ctx, text: string, x: number, y: number) {
+  setSpacing(ctx, 1)
+  ctx.fillStyle = W_RED; ctx.font = wf(900, 26)
+  ctx.fillText(text, x, y)
+  setSpacing(ctx, 0)
+}
+
+/** Name + company under the circle, then "Marketing by Webtek" (always). */
+function posterCaptionAndCredit(ctx: Ctx, line1: string, line2: string, webtek: HTMLImageElement | null) {
+  const pcx = 1250
+  ctx.textAlign = 'center'
+  ctx.fillStyle = WHITE
+  ctx.font = wf(900, fitLine(ctx, line1, 900, 500, 44, 24))
+  ctx.fillText(line1, pcx, 797)
+  if (line2) {
+    setSpacing(ctx, 1)
+    ctx.fillStyle = '#f2b8bc'
+    ctx.font = wf(700, fitLine(ctx, line2, 700, 480, 28, 16))
+    ctx.fillText(line2, pcx, 836)
+    setSpacing(ctx, 0)
+  }
+  setSpacing(ctx, 3)
+  ctx.font = wf(700, 17); ctx.fillStyle = MUTED
+  ctx.fillText('MARKETING BY', pcx, 893)
+  setSpacing(ctx, 0)
+  if (webtek) {
+    const lh = 34
+    const lw = (webtek.width / webtek.height) * lh
+    ctx.drawImage(webtek, pcx - lw / 2, 902, lw, lh)
+  } else {
+    ctx.font = wf(900, 30); ctx.fillStyle = WHITE
+    ctx.fillText('WebTek.ai', pcx, 928)
+  }
+  ctx.textAlign = 'left'
+}
+
+function posterFooter(ctx: Ctx) {
+  ctx.fillStyle = W_RED
+  ctx.fill(new Path2D('M0 924 L940 924 L960 1024 L0 1024 Z'))
+  ctx.fillStyle = WHITE
+  ctx.beginPath(); ctx.arc(98, 962, 11, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(74, 970, 8, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(122, 970, 8, 0, Math.PI * 2); ctx.fill()
+  ctx.save(); ctx.translate(62, 946)
+  ctx.fill(new Path2D('M14 54 C14 36 58 36 58 54 Z'))
+  ctx.restore()
+  setSpacing(ctx, 1)
+  const tag = 'MORE VISITORS. MORE REFERRALS. MORE BUSINESS.'
+  ctx.font = wf(700, fitLine(ctx, tag, 700, 760, 34, 22))
+  ctx.fillText(tag, 164, 987)
+  setSpacing(ctx, 0)
+  ctx.textAlign = 'right'
+  ctx.font = wf(700, 20)
+  ctx.fillText('Changing the Way', 1512, 974)
+  ctx.fillText('the World Does Business®', 1512, 998)
+  ctx.textAlign = 'left'
+}
+
+function drawWelcome(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTMLImageElement | null, webtek: HTMLImageElement | null) {
+  const name = (d.title || 'New Member').trim()
+  const first = name.split(/\s+/)[0] || 'our newest member'
+  const company = (d.subtitle || '').trim()
+  const classification = (d.lines?.[0] || '').trim()
+  const role = (d.lines?.[1] || '').trim()
+  const nameUp = name.toUpperCase()
+
+  posterBase(ctx, W, H)
+  posterTitle(ctx, 'WELCOME')
+  posterRuleLabel(ctx, 'OUR NEW MEMBER')
+  posterRedLine(ctx, nameUp)
+  posterScript(ctx, company)
+  posterBox(ctx, () => {
+    posterColLabel(ctx, 'CLASSIFICATION', 67, 735)
+    ctx.fillStyle = '#111'
+    const cl = classification || 'Business Owner'
+    ctx.font = wf(900, fitLine(ctx, cl, 900, 340, 36, 24))
+    ctx.fillText(cl, 67, 772)
+    if (role) {
+      ctx.fillStyle = '#333'
+      ctx.font = wf(700, fitLine(ctx, role, 700, 340, 28, 18))
+      ctx.fillText(role, 67, 806)
+    }
+    posterColLabel(ctx, 'LEADERSHIP & SUPPORT', 451, 735)
+    posterColLabel(ctx, 'TEAM', 451, 765)
+    ctx.fillStyle = '#111'; ctx.font = wf(900, 30)
+    drawWrapped(ctx, `Reach out and welcome ${first} personally!`, 451, 800, 335, 34, 2)
+  }, `Welcome to the chapter, ${first}!`)
+  posterBadge(ctx, 'NEW MEMBER', 'ALERT!', 'house')
+
   const pcx = 1250, pcy = 520
   ctx.beginPath(); ctx.arc(pcx, pcy, 210, 0, Math.PI * 2); ctx.fillStyle = WHITE; ctx.fill()
   if (photo) {
@@ -863,55 +940,62 @@ function drawWelcome(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTML
     ctx.restore()
   } else {
     ctx.beginPath(); ctx.arc(pcx, pcy, 200, 0, Math.PI * 2); ctx.fillStyle = '#3a3e44'; ctx.fill()
-    initialsCircle(ctx, pcx, pcy, 150, d.initials || 'TB')
+    initialsCircle(ctx, pcx, pcy, 150, d.initials || name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'TB')
   }
-  ctx.textAlign = 'center'
-  ctx.fillStyle = WHITE
-  ctx.font = wf(900, fitLine(ctx, nameUp, 900, 500, 44, 24))
-  ctx.fillText(nameUp, pcx, 797)
-  if (company) {
-    setSpacing(ctx, 1)
-    ctx.fillStyle = '#f2b8bc'
-    const cu = company.toUpperCase()
-    ctx.font = wf(700, fitLine(ctx, cu, 700, 480, 28, 16))
-    ctx.fillText(cu, pcx, 836)
-    setSpacing(ctx, 0)
-  }
+  posterCaptionAndCredit(ctx, nameUp, company.toUpperCase(), webtek)
+  posterFooter(ctx)
+}
 
-  // Webtek credit (always)
-  setSpacing(ctx, 3)
-  ctx.font = wf(700, 17); ctx.fillStyle = MUTED
-  ctx.fillText('MARKETING BY', pcx, 893)
-  setSpacing(ctx, 0)
-  if (webtek) {
-    const lh = 34
-    const lw2 = (webtek.width / webtek.height) * lh
-    ctx.drawImage(webtek, pcx - lw2 / 2, 902, lw2, lh)
-  } else {
-    ctx.font = wf(900, 30); ctx.fillStyle = WHITE
-    ctx.fillText('WebTek.ai', pcx, 928)
-  }
-  ctx.textAlign = 'left'
+/**
+ * Open-seat poster: invites a new member for one of the chapter's business
+ * categories. title = category, subtitle = script tagline,
+ * lines = 3 "who we're looking for" lines.
+ */
+function drawSeatOpen(ctx: Ctx, W: number, H: number, d: GraphicData, webtek: HTMLImageElement | null) {
+  const seat = (d.title || 'Your Business').trim()
+  const seatUp = seat.toUpperCase()
+  const fit = (d.lines || []).filter(Boolean).slice(0, 3)
 
-  // footer band
-  ctx.fillStyle = W_RED
-  ctx.fill(new Path2D('M0 924 L940 924 L960 1024 L0 1024 Z'))
-  ctx.fillStyle = WHITE
-  ctx.beginPath(); ctx.arc(62 + 36, 946 + 16, 11, 0, Math.PI * 2); ctx.fill()
-  ctx.beginPath(); ctx.arc(62 + 12, 946 + 24, 8, 0, Math.PI * 2); ctx.fill()
-  ctx.beginPath(); ctx.arc(62 + 60, 946 + 24, 8, 0, Math.PI * 2); ctx.fill()
-  ctx.save(); ctx.translate(62, 946)
-  ctx.fill(new Path2D('M14 54 C14 36 58 36 58 54 Z'))
+  posterBase(ctx, W, H)
+  posterTitle(ctx, 'SEAT OPEN')
+  posterRuleLabel(ctx, "WE'RE LOOKING FOR A")
+  posterRedLine(ctx, seatUp)
+  posterScript(ctx, (d.subtitle || 'Your referral partners are waiting.').trim())
+  posterBox(ctx, () => {
+    posterColLabel(ctx, 'A GREAT FIT', 67, 735)
+    ctx.fillStyle = '#111'
+    const list = fit.length ? fit : [`An established local ${seat}`, 'Loves helping other owners', 'Ready for Thursdays']
+    const lpx = Math.min(...list.map((r) => fitLine(ctx, `• ${r}`, 700, 340, 27, 17)))
+    ctx.font = wf(700, lpx)
+    list.forEach((r, i) => ctx.fillText(`• ${r}`, 67, 772 + i * 30))
+    posterColLabel(ctx, 'WHY JOIN', 451, 735)
+    ctx.fillStyle = '#111'
+    const why = ['• The only one in your category', '• Referrals every week', '• A room of local owners']
+    const wpx = Math.min(...why.map((t) => fitLine(ctx, t, 700, 335, 27, 17)))
+    ctx.font = wf(700, wpx)
+    why.forEach((t, i) => ctx.fillText(t, 451, 772 + i * 30))
+  }, "Visit free · Thursdays 11:30 AM · Mike Duffy's, Kirkwood")
+  posterBadge(ctx, 'SEAT', 'AVAILABLE!', 'join')
+
+  // empty seat waiting for its member
+  const pcx = 1250, pcy = 520
+  ctx.beginPath(); ctx.arc(pcx, pcy, 210, 0, Math.PI * 2); ctx.fillStyle = WHITE; ctx.fill()
+  ctx.beginPath(); ctx.arc(pcx, pcy, 200, 0, Math.PI * 2); ctx.fillStyle = '#2c3036'; ctx.fill()
+  ctx.save()
+  ctx.setLineDash([18, 14]); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+  ctx.beginPath(); ctx.arc(pcx, pcy, 170, 0, Math.PI * 2); ctx.stroke()
   ctx.restore()
-  setSpacing(ctx, 1)
-  ctx.font = wf(700, 34)
-  ctx.fillText('MORE VISITORS. MORE REFERRALS. MORE BUSINESS.', 164, 987)
-  setSpacing(ctx, 0)
-  ctx.textAlign = 'right'
-  ctx.font = wf(700, 20)
-  ctx.fillText('Changing the Way', 1512, 974)
-  ctx.fillText('the World Does Business®', 1512, 998)
+  ctx.fillStyle = 'rgba(255,255,255,0.18)'
+  ctx.beginPath(); ctx.arc(pcx, pcy - 50, 58, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.ellipse(pcx, pcy + 95, 110, 70, 0, Math.PI, 0); ctx.fill()
+  ctx.fillStyle = WHITE; ctx.textAlign = 'center'
+  ctx.font = wf(900, 46)
+  ctx.fillText('YOUR SEAT', pcx, pcy + 30)
+  ctx.fillText('IS WAITING', pcx, pcy + 78)
   ctx.textAlign = 'left'
+
+  posterCaptionAndCredit(ctx, 'COULD THIS BE YOU?', `KNOW A GREAT ${seatUp}? TAG THEM`, webtek)
+  posterFooter(ctx)
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -960,6 +1044,10 @@ async function paint(canvas: HTMLCanvasElement, data: GraphicData, format: Graph
     drawWelcome(ctx, W, H, data, photo, webtek)
     return
   }
+  if (data.kind === 'seat_open') {
+    drawSeatOpen(ctx, W, H, data, webtek)
+    return
+  }
   const usePhotoCard = data.kind === 'photo' && !!photo
   const onRed = data.kind === 'meeting_day' || data.kind === 'visitor_invite'
 
@@ -996,6 +1084,8 @@ export default function SocialGraphic({
   renderedCb.current = onRendered
   const [rendering, setRendering] = useState(true)
   const [error, setError] = useState('')
+  // Poster templates only exist in landscape.
+  if (data.kind === 'welcome' || data.kind === 'seat_open') format = 'landscape'
   const { w, h } = FORMAT_SIZE[format]
   const dataKey = JSON.stringify(data)
 

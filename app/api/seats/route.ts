@@ -5,50 +5,12 @@ import Member from '@/lib/models/Member'
 import EmailCampaign from '@/lib/models/EmailCampaign'
 import { getSession } from '@/lib/auth'
 import { isSeatFilledByMembers, professionMatchesSeat } from '@/lib/seatAliases'
+import { ALL_SEATS, seatTeam } from '@/lib/chapterSeats'
 
-/**
- * Canonical 34-seat list for Think Big St. Louis.
- * Exported so other routes can reference the same source of truth.
- */
-const ALL_SEATS = [
-  'Accountant / CPA',
-  'Attorney / Lawyer',
-  'Auto Sales',
-  'Banker',
-  'Business Coach',
-  'Chiropractor',
-  'Contractor / Builder',
-  'Dentist',
-  'Digital Marketing',
-  'Event Planner',
-  'Financial Advisor',
-  'Florist',
-  'Health & Wellness',
-  'Home Inspector',
-  'HR Consultant',
-  'Insurance Agent',
-  'Interior Designer',
-  'IT / Tech Consultant',
-  'Landscaper',
-  'Life Coach',
-  'Marketing Consultant',
-  'Mortgage Broker',
-  'Nutritionist',
-  'Photographer',
-  'Physical Therapist',
-  'Printer / Promotional',
-  'Property Manager',
-  'Realtor',
-  'Recruiter',
-  'Solar / Energy',
-  'Tax Consultant',
-  'Travel Agent',
-  'Videographer',
-  'Web Designer / Developer',
-]
 
 export interface SeatView {
   profession: string
+  team: string
   status: 'filled' | 'active' | 'paused' | 'open'
   outreach_status: 'open' | 'active' | 'paused'
   campaign_id: string | null
@@ -129,6 +91,7 @@ export async function GET(req: NextRequest) {
 
     return {
       profession,
+      team: seatTeam(profession) ?? 'Other',
       status,
       outreach_status: seat?.outreach_status ?? 'open',
       campaign_id: seat?.campaign_id?.toString() ?? null,

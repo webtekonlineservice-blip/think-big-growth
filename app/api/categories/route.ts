@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { connectDB } from '@/lib/mongodb'
 import Member from '@/lib/models/Member'
 import { getSession } from '@/lib/auth'
+import { ALL_SEATS } from '@/lib/chapterSeats'
+import { isSeatFilledByMembers } from '@/lib/seatAliases'
 
 // Reads the session from request headers/cookies, so it cannot be statically rendered.
 export const dynamic = 'force-dynamic'
@@ -17,43 +19,6 @@ export const dynamic = 'force-dynamic'
  * never receive member names/companies.
  */
 
-// Full BNI category list for reference
-const ALL_CATEGORIES = [
-  'Accountant / CPA',
-  'Attorney / Lawyer',
-  'Auto Sales',
-  'Banker',
-  'Business Coach',
-  'Chiropractor',
-  'Contractor / Builder',
-  'Dentist',
-  'Digital Marketing',
-  'Event Planner',
-  'Financial Advisor',
-  'Florist',
-  'Health & Wellness',
-  'Home Inspector',
-  'HR Consultant',
-  'Insurance Agent',
-  'Interior Designer',
-  'IT / Tech Consultant',
-  'Landscaper',
-  'Life Coach',
-  'Marketing Consultant',
-  'Mortgage Broker',
-  'Nutritionist',
-  'Photographer',
-  'Physical Therapist',
-  'Printer / Promotional',
-  'Property Manager',
-  'Realtor',
-  'Recruiter',
-  'Solar / Energy',
-  'Tax Consultant',
-  'Travel Agent',
-  'Videographer',
-  'Web Designer / Developer',
-]
 
 export async function GET(req: NextRequest) {
   try {
@@ -65,11 +30,7 @@ export async function GET(req: NextRequest) {
       .filter((m) => m.role)
       .map((m) => m.role.toLowerCase())
 
-    const openCategories = ALL_CATEGORIES.filter(
-      (cat) => !takenRoleNames.some((taken) =>
-        cat.toLowerCase().includes(taken) || taken.includes(cat.toLowerCase())
-      )
-    )
+    const openCategories = ALL_SEATS.filter((cat) => !isSeatFilledByMembers(cat, takenRoleNames))
 
     // Only admins get the member roster detail (PII). Everyone else gets
     // open categories only.
