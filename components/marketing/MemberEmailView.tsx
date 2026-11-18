@@ -140,7 +140,7 @@ export default function AnnouncePage() {
       )}
 
       <p className="text-xs text-gray-600 text-center">
-        Every send is logged in the <a href="/admin/send-log" className="text-brand-indigo-light hover:underline">Send Log</a>.
+        Every send is logged in the <a href="/admin/marketing/activity?view=log" className="text-brand-indigo-light hover:underline">Send Log</a>.
       </p>
     </div>
   )

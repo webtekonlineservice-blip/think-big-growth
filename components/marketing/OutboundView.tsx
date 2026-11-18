@@ -292,7 +292,7 @@ export default function OutboundPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Link href="/admin/lead-engine"
+          <Link href="/admin/marketing/outreach?view=leads"
             className="flex items-center gap-1.5 text-xs border border-gray-700 text-gray-400 hover:text-white hover:border-brand-blue/50 px-3 py-1.5 rounded-lg transition">
             <Zap className="w-3.5 h-3.5" /><span className="hidden sm:inline">Lead Engine</span>
           </Link>
@@ -494,7 +494,7 @@ export default function OutboundPage() {
                     <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                       <Upload className="w-4 h-4 text-gray-400" /> Import from CSV
                     </h3>
-                    <Link href="/admin/lead-engine" className="text-xs text-brand-blue hover:text-white transition flex items-center gap-1">
+                    <Link href="/admin/marketing/outreach?view=leads" className="text-xs text-brand-blue hover:text-white transition flex items-center gap-1">
                       <Zap className="w-3 h-3" /> Or use Lead Engine
                     </Link>
                   </div>

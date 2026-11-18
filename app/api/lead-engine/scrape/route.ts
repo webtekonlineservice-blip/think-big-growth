@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
         try {
           await sendSms(
             notifyPhone,
-            `🔥 Think Big Lead Engine: ${hotWithEmail.length} hot leads found from ${chamber.name}!\n\nTop picks:\n${topList}\n\nView at ${process.env.NEXT_PUBLIC_APP_URL}/admin/lead-engine`
+            `🔥 Think Big Lead Engine: ${hotWithEmail.length} hot leads found from ${chamber.name}!\n\nTop picks:\n${topList}\n\nView at ${process.env.NEXT_PUBLIC_APP_URL}/admin/marketing/outreach?view=leads`
           )
           notifySent.push(`SMS → ${notifyPhone}`)
         } catch (e) {
@@ -225,7 +225,7 @@ export async function POST(req: NextRequest) {
       <tbody>${rows}</tbody>
     </table>
     <div style="margin-top:24px;text-align:center;">
-      <a href="${process.env.NEXT_PUBLIC_APP_URL}/admin/lead-engine" style="background:#2563eb;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
+      <a href="${process.env.NEXT_PUBLIC_APP_URL}/admin/marketing/outreach?view=leads" style="background:#2563eb;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
         View Lead Engine →
       </a>
     </div>

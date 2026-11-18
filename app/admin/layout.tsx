@@ -4,26 +4,15 @@ import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import {
-  LayoutDashboard, Users, UserCircle, Send, Mail,
-  FlaskConical, BarChart3, ScrollText, Target, LogOut, Menu, Megaphone, CheckSquare, Wallet, Radio, TrendingUp, Zap,
-} from 'lucide-react'
+import { LayoutDashboard, Users, UserCircle, LogOut, Menu, Wallet, Radio } from 'lucide-react'
 
+// Five places to go. Marketing and Members each hold several tabs inside.
 const NAV_ITEMS = [
   { label: 'Dashboard', href: '/admin', Icon: LayoutDashboard },
-  { label: 'Growth Advisor', href: '/admin/growth', Icon: TrendingUp },
-  { label: 'Lead Engine', href: '/admin/lead-engine', Icon: Zap },
-  { label: 'Visitors', href: '/admin/visitors', Icon: Users },
-  { label: 'Members', href: '/admin/members', Icon: UserCircle },
   { label: 'Treasurer', href: '/admin/treasurer', Icon: Wallet },
+  { label: 'Members', href: '/admin/members', Icon: UserCircle },
+  { label: 'Visitors', href: '/admin/visitors', Icon: Users },
   { label: 'Marketing', href: '/admin/marketing', Icon: Radio },
-  { label: 'Seats', href: '/admin/seats', Icon: CheckSquare },
-  { label: 'Outbound', href: '/admin/outbound', Icon: Send },
-  { label: 'Campaigns', href: '/admin/campaigns', Icon: Mail },
-  { label: 'Announce', href: '/admin/announce', Icon: Megaphone },
-  { label: 'Email Test', href: '/admin/email-test', Icon: FlaskConical },
-  { label: 'Analytics', href: '/admin/analytics', Icon: BarChart3 },
-  { label: 'Send Log', href: '/admin/send-log', Icon: ScrollText },
 ]
 
 function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {

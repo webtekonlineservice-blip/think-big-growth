@@ -254,8 +254,8 @@ function MoveCard({ move, snapshot }: { move: GrowthMove; snapshot: Snapshot | n
   }
 
   // Deep links that carry the draft into the existing tools for a full send.
-  const campaignsHref = `/admin/campaigns?draft=${encodeURIComponent(a.draft || '')}&audience=${a.type === 'outreach_prospects' ? 'prospects' : 'visitors'}`
-  const socialHref = `/admin/treasurer?tab=social`
+  const campaignsHref = `/admin/marketing/messages?view=send&draft=${encodeURIComponent(a.draft || '')}&audience=${a.type === 'outreach_prospects' ? 'prospects' : 'visitors'}`
+  const socialHref = `/admin/marketing/social`
 
   const isSegment = a.type === 'sms_segment' || a.type === 'email_segment' || a.type === 'outreach_prospects'
 

@@ -227,7 +227,7 @@ export default function AdminDashboard() {
         <StatTile
           label="Seats Filled" value={`${data.seatsFilled}/34`}
           sub={`${data.seatsActive} active · ${data.seatsOpen} open`}
-          color="text-brand-red" Icon={CheckSquare} href="/admin/seats"
+          color="text-brand-red" Icon={CheckSquare} href="/admin/members/seats"
         />
       </div>
 
@@ -244,7 +244,7 @@ export default function AdminDashboard() {
         <StatusStrip
           title="Outbound Campaigns"
           Icon={Target}
-          href="/admin/outbound"
+          href="/admin/marketing/outreach?view=campaigns"
           items={[
             { label: 'Prospects', value: data.totalProspects.toLocaleString(), color: 'text-brand-orange' },
             { label: 'Emails Sent', value: data.totalSent.toLocaleString(), color: 'text-purple-400' },
@@ -255,7 +255,7 @@ export default function AdminDashboard() {
         <StatusStrip
           title="Marketing"
           Icon={Radio}
-          href="/admin/marketing"
+          href="/admin/marketing/activity"
           items={[
             { label: 'Sends (7d)', value: data.recentSends.toString(), color: 'text-green-400' },
             { label: 'Scheduled Posts', value: data.scheduledPosts.toString(), color: 'text-brand-blue' },
@@ -406,10 +406,10 @@ function NeedsAttention({ ledger, pendingVisitors }: {
 function QuickActions() {
   const actions = [
     { label: 'Weekly Bill', href: '/admin/treasurer', icon: DollarSign, color: 'bg-brand-blue text-white' },
-    { label: 'Send Reminder', href: '/admin/marketing', icon: Radio, color: 'bg-green-600 text-white' },
-    { label: 'Invoice Member', href: '/admin/marketing', icon: Wallet, color: 'bg-brand-red text-white' },
+    { label: 'Send Reminder', href: '/admin/marketing/messages?view=billing', icon: Radio, color: 'bg-green-600 text-white' },
+    { label: 'Invoice Member', href: '/admin/marketing/messages?view=billing', icon: Wallet, color: 'bg-brand-red text-white' },
     { label: 'New Visitor', href: '/admin/visitors', icon: Users, color: 'bg-purple-600 text-white' },
-    { label: 'Social Post', href: '/admin/treasurer', icon: Megaphone, color: 'bg-pink-600 text-white' },
+    { label: 'Social Post', href: '/admin/marketing/social', icon: Megaphone, color: 'bg-pink-600 text-white' },
     { label: 'View Report', href: '/admin/treasurer', icon: BarChart3, color: 'bg-gray-700 text-white' },
   ]
   return (
