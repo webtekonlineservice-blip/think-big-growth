@@ -5,6 +5,7 @@ import { CHAMBERS, scrapeChamber, enrichEmails, scoreMembers } from '@/lib/chamb
 import Prospect from '@/lib/models/Prospect'
 import ScrapingLog from '@/lib/models/ScrapingLog'
 import EmailCampaign from '@/lib/models/EmailCampaign'
+import { badEmailReason } from '@/lib/outbound'
 import Member from '@/lib/models/Member'
 import { sendSms } from '@/lib/twilio'
 import { Resend } from 'resend'
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
     // Merge emails back
     const readyLeads = shortlisted.map((m) => ({
       ...m,
-      email: enrichedMap.get(m.name.toLowerCase()) || '',
+      email: (() => { const e = enrichedMap.get(m.name.toLowerCase()) || ''; return e && !badEmailReason(e) ? e : '' })(),
     }))
 
     const withEmail = readyLeads.filter((m) => m.email)

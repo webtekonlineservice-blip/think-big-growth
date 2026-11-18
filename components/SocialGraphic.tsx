@@ -16,9 +16,9 @@ import { useEffect, useRef, useState } from 'react'
 
 export type GraphicKind =
   | 'open_seats' | 'speaker' | 'spotlight' | 'meeting_promo' | 'visitor_invite' | 'win'
-  | 'meeting_day' | 'recap' | 'evergreen' | 'photo' | 'custom'
+  | 'meeting_day' | 'recap' | 'evergreen' | 'photo' | 'welcome' | 'custom'
 
-export type GraphicFormat = 'square' | 'portrait'
+export type GraphicFormat = 'square' | 'portrait' | 'landscape'
 
 /** Photo template styles: full-bleed overlay, framed photo with text below, or photo over a red banner. */
 export type PhotoWrapper = 'overlay' | 'frame' | 'banner'
@@ -31,6 +31,7 @@ export const PHOTO_WRAPPERS: { id: PhotoWrapper; label: string }[] = [
 export const FORMAT_SIZE: Record<GraphicFormat, { w: number; h: number }> = {
   square: { w: 1080, h: 1080 },
   portrait: { w: 1080, h: 1350 },
+  landscape: { w: 1536, h: 1024 },
 }
 
 export interface GraphicData {
@@ -77,6 +78,7 @@ const EYEBROW: Record<GraphicKind, string> = {
   recap: 'THIS WEEK AT THINK BIG',
   evergreen: 'WHY REFERRALS WORK',
   photo: 'THINK BIG ST. LOUIS',
+  welcome: 'NEW MEMBER',
   custom: 'THINK BIG ST. LOUIS',
 }
 
@@ -91,6 +93,7 @@ const DEFAULT_CTA: Record<GraphicKind, string> = {
   recap: 'Join us next Thursday →',
   evergreen: 'Visit us this Thursday →',
   photo: 'Visit us this Thursday →',
+  welcome: 'Reach out and welcome them →',
   custom: 'Visit Think Big →',
 }
 
@@ -725,6 +728,192 @@ function drawPhotoOverlay(ctx: Ctx, W: number, H: number, d: GraphicData, photo:
   }
 }
 
+
+// ─── Welcome new member (landscape 1536×1024) ───────────────────────────────
+
+const W_RED = '#b30f1e'
+const W_DARK = '#202327'
+const W_FONT = "'Roboto Condensed', Arial, Helvetica, sans-serif"
+const W_SCRIPT = "'Kaushan Script', cursive"
+const wf = (weight: number, px: number, italic = false) => `${italic ? 'italic ' : ''}${weight} ${px}px ${W_FONT}`
+
+function drawWelcome(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTMLImageElement | null, webtek: HTMLImageElement | null) {
+  const name = (d.title || 'New Member').trim()
+  const first = name.split(/\s+/)[0] || 'our newest member'
+  const company = (d.subtitle || '').trim()
+  const classification = (d.lines?.[0] || '').trim()
+  const role = (d.lines?.[1] || '').trim()
+  ctx.textBaseline = 'alphabetic'
+  ctx.textAlign = 'left'
+
+  // background + swoosh
+  ctx.fillStyle = '#f3f3f3'
+  ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = W_RED
+  ctx.fill(new Path2D('M1150 0 L1536 0 L1536 1024 L900 1024 C840 700 880 300 1150 0 Z'))
+  ctx.fillStyle = W_DARK
+  ctx.fill(new Path2D('M1190 0 L1536 0 L1536 1024 L960 1024 C890 700 940 300 1190 0 Z'))
+
+  // BNI + chapter
+  setSpacing(ctx, -4)
+  ctx.fillStyle = W_RED
+  ctx.font = wf(900, 112, true)
+  ctx.fillText('BNI', 40, 122)
+  setSpacing(ctx, 1)
+  ctx.fillStyle = '#444'
+  ctx.font = wf(700, 42)
+  ctx.fillText('THINK BIG', 40, 164)
+  ctx.fillText('ST. LOUIS', 40, 210)
+
+  // WELCOME
+  setSpacing(ctx, 0)
+  ctx.fillStyle = '#111'
+  ctx.font = wf(900, 158)
+  ctx.fillText('WELCOME', 40, 344)
+
+  // OUR NEW MEMBER with rules
+  setSpacing(ctx, 2)
+  ctx.font = wf(700, 46)
+  ctx.fillStyle = '#444'
+  const label = 'OUR NEW MEMBER'
+  const lw = ctx.measureText(label).width
+  const cx = 40 + 380
+  ctx.textAlign = 'center'
+  ctx.fillText(label, cx, 418)
+  ctx.textAlign = 'left'
+  ctx.fillRect(40, 400, cx - lw / 2 - 20 - 40, 3)
+  ctx.fillRect(cx + lw / 2 + 20, 400, 800 - (cx + lw / 2 + 20), 3)
+
+  // name (shrinks to stay clear of the swoosh)
+  setSpacing(ctx, 0)
+  ctx.fillStyle = W_RED
+  const nameUp = name.toUpperCase()
+  let px = 122
+  for (; px > 60; px -= 2) { ctx.font = wf(900, px); if (ctx.measureText(nameUp).width <= 800) break }
+  ctx.fillText(nameUp, 40, 430 + px * 0.84 + (122 - px) * 0.1)
+
+  // company (script)
+  ctx.fillStyle = '#333'
+  let cpx = 76
+  for (; cpx > 36; cpx -= 2) { ctx.font = `${cpx}px ${W_SCRIPT}`; if (ctx.measureText(company).width <= 780) break }
+  if (company) ctx.fillText(company, 44, 622)
+
+  // info box
+  rr(ctx, 41.5, 691.5, 767, 223, 18)
+  ctx.fillStyle = WHITE; ctx.fill()
+  ctx.lineWidth = 3; ctx.strokeStyle = '#222'; ctx.stroke()
+  ctx.save()
+  rr(ctx, 41.5, 691.5, 767, 223, 18); ctx.clip()
+  // column 1
+  setSpacing(ctx, 1)
+  ctx.fillStyle = W_RED; ctx.font = wf(900, 26)
+  ctx.fillText('CLASSIFICATION', 67, 735)
+  setSpacing(ctx, 0)
+  ctx.fillStyle = '#111'
+  const cl = classification || 'Business Owner'
+  const clPx = fitLine(ctx, cl, 900, 340, 36, 24)
+  ctx.font = wf(900, clPx)
+  ctx.fillText(cl, 67, 772)
+  if (role) {
+    ctx.fillStyle = '#333'
+    const rp = fitLine(ctx, role, 700, 340, 28, 18)
+    ctx.font = wf(700, rp)
+    ctx.fillText(role, 67, 806)
+  }
+  // divider
+  ctx.fillStyle = '#222'; ctx.fillRect(423, 712, 3, 133)
+  // column 2
+  setSpacing(ctx, 1)
+  ctx.fillStyle = W_RED; ctx.font = wf(900, 26)
+  ctx.fillText('LEADERSHIP & SUPPORT', 451, 735)
+  ctx.fillText('TEAM', 451, 765)
+  setSpacing(ctx, 0)
+  ctx.fillStyle = '#111'; ctx.font = wf(900, 32)
+  drawWrapped(ctx, `Reach out and welcome ${first} personally!`, 451, 800, 335, 36, 2)
+  // black pill
+  rr(ctx, 67, 859, 716, 62, 12); ctx.fillStyle = '#111'; ctx.fill()
+  ctx.fillStyle = WHITE; ctx.textAlign = 'center'
+  const pillText = `Welcome to the chapter, ${first}!`
+  ctx.font = wf(700, fitLine(ctx, pillText, 700, 680, 38, 22))
+  ctx.fillText(pillText, 425, 903 - 10)
+  ctx.textAlign = 'left'
+  ctx.restore()
+
+  // NEW MEMBER ALERT badge
+  ctx.beginPath(); ctx.arc(960, 180, 140, 0, Math.PI * 2); ctx.fillStyle = WHITE; ctx.fill()
+  ctx.beginPath(); ctx.arc(960, 180, 132, 0, Math.PI * 2); ctx.fillStyle = W_RED; ctx.fill()
+  ctx.save()
+  ctx.translate(918, 98)
+  ctx.strokeStyle = WHITE; ctx.lineWidth = 6; ctx.lineJoin = 'round'; ctx.lineCap = 'round'
+  ctx.stroke(new Path2D('M8 38 L42 8 L76 38 M16 32 V68 H68 V32'))
+  ctx.fillStyle = WHITE; ctx.fillRect(34, 42, 16, 26)
+  ctx.restore()
+  ctx.fillStyle = WHITE; ctx.textAlign = 'center'; ctx.font = wf(900, 36)
+  ctx.fillText('NEW MEMBER', 960, 216)
+  ctx.fillText('ALERT!', 960, 256)
+  ctx.textAlign = 'left'
+
+  // photo circle
+  const pcx = 1250, pcy = 520
+  ctx.beginPath(); ctx.arc(pcx, pcy, 210, 0, Math.PI * 2); ctx.fillStyle = WHITE; ctx.fill()
+  if (photo) {
+    ctx.save()
+    ctx.beginPath(); ctx.arc(pcx, pcy, 200, 0, Math.PI * 2); ctx.clip()
+    cover(ctx, photo, pcx - 200, pcy - 200, 400, 400, 0, 0.25)
+    ctx.restore()
+  } else {
+    ctx.beginPath(); ctx.arc(pcx, pcy, 200, 0, Math.PI * 2); ctx.fillStyle = '#3a3e44'; ctx.fill()
+    initialsCircle(ctx, pcx, pcy, 150, d.initials || 'TB')
+  }
+  ctx.textAlign = 'center'
+  ctx.fillStyle = WHITE
+  ctx.font = wf(900, fitLine(ctx, nameUp, 900, 500, 44, 24))
+  ctx.fillText(nameUp, pcx, 797)
+  if (company) {
+    setSpacing(ctx, 1)
+    ctx.fillStyle = '#f2b8bc'
+    const cu = company.toUpperCase()
+    ctx.font = wf(700, fitLine(ctx, cu, 700, 480, 28, 16))
+    ctx.fillText(cu, pcx, 836)
+    setSpacing(ctx, 0)
+  }
+
+  // Webtek credit (always)
+  setSpacing(ctx, 3)
+  ctx.font = wf(700, 17); ctx.fillStyle = MUTED
+  ctx.fillText('MARKETING BY', pcx, 893)
+  setSpacing(ctx, 0)
+  if (webtek) {
+    const lh = 34
+    const lw2 = (webtek.width / webtek.height) * lh
+    ctx.drawImage(webtek, pcx - lw2 / 2, 902, lw2, lh)
+  } else {
+    ctx.font = wf(900, 30); ctx.fillStyle = WHITE
+    ctx.fillText('WebTek.ai', pcx, 928)
+  }
+  ctx.textAlign = 'left'
+
+  // footer band
+  ctx.fillStyle = W_RED
+  ctx.fill(new Path2D('M0 924 L940 924 L960 1024 L0 1024 Z'))
+  ctx.fillStyle = WHITE
+  ctx.beginPath(); ctx.arc(62 + 36, 946 + 16, 11, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(62 + 12, 946 + 24, 8, 0, Math.PI * 2); ctx.fill()
+  ctx.beginPath(); ctx.arc(62 + 60, 946 + 24, 8, 0, Math.PI * 2); ctx.fill()
+  ctx.save(); ctx.translate(62, 946)
+  ctx.fill(new Path2D('M14 54 C14 36 58 36 58 54 Z'))
+  ctx.restore()
+  setSpacing(ctx, 1)
+  ctx.font = wf(700, 34)
+  ctx.fillText('MORE VISITORS. MORE REFERRALS. MORE BUSINESS.', 164, 987)
+  setSpacing(ctx, 0)
+  ctx.textAlign = 'right'
+  ctx.font = wf(700, 20)
+  ctx.fillText('Changing the Way', 1512, 974)
+  ctx.fillText('the World Does Business®', 1512, 998)
+  ctx.textAlign = 'left'
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 async function loadImage(src: string | undefined): Promise<HTMLImageElement | null> {
@@ -738,10 +927,18 @@ async function loadImage(src: string | undefined): Promise<HTMLImageElement | nu
   })
 }
 
+let templateFontsLoaded = false
 async function ensureFonts() {
   try {
     if (typeof document === 'undefined' || !document.fonts) return
     await Promise.all([400, 500, 600, 700, 800, 900].map((w) => document.fonts.load(`${w} 40px Inter`)))
+    if (!templateFontsLoaded) {
+      const rc = new FontFace('Roboto Condensed', 'url(/fonts/RobotoCondensed-latin.woff2)', { weight: '100 900' })
+      const ks = new FontFace('Kaushan Script', 'url(/fonts/KaushanScript-latin.woff2)')
+      const loaded = await Promise.all([rc.load(), ks.load()])
+      loaded.forEach((ff) => document.fonts.add(ff))
+      templateFontsLoaded = true
+    }
   } catch { /* fall back to Arial */ }
 }
 
@@ -759,6 +956,10 @@ async function paint(canvas: HTMLCanvasElement, data: GraphicData, format: Graph
   ])
 
   ctx.clearRect(0, 0, W, H)
+  if (data.kind === 'welcome') {
+    drawWelcome(ctx, W, H, data, photo, webtek)
+    return
+  }
   const usePhotoCard = data.kind === 'photo' && !!photo
   const onRed = data.kind === 'meeting_day' || data.kind === 'visitor_invite'
 

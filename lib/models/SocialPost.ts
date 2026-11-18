@@ -3,12 +3,12 @@ import mongoose, { Schema, Document, Model } from 'mongoose'
 export type SocialPlatform = 'facebook' | 'linkedin' | 'instagram'
 export type SocialType =
   | 'meeting_promo' | 'speaker' | 'spotlight' | 'visitor_invite' | 'win' | 'open_seats' | 'custom'
-  | 'meeting_day' | 'recap' | 'evergreen' | 'photo'
+  | 'meeting_day' | 'recap' | 'evergreen' | 'photo' | 'welcome'
 export type SocialStatus = 'idea' | 'drafted' | 'scheduled' | 'posted'
 
 export const SOCIAL_TYPES: SocialType[] = [
   'meeting_promo', 'speaker', 'spotlight', 'visitor_invite', 'win', 'open_seats', 'custom',
-  'meeting_day', 'recap', 'evergreen', 'photo',
+  'meeting_day', 'recap', 'evergreen', 'photo', 'welcome',
 ]
 export const SOCIAL_PLATFORMS: SocialPlatform[] = ['facebook', 'linkedin', 'instagram']
 export const SOCIAL_STATUSES: SocialStatus[] = ['idea', 'drafted', 'scheduled', 'posted']
@@ -34,7 +34,7 @@ export interface ISocialPost extends Document {
   member_id: string                  // featured member ('' if none)
   photo_id: string                   // SocialPhoto id ('' if none)
   graphic: SocialGraphicSpec | null
-  format: 'square' | 'portrait'
+  format: 'square' | 'portrait' | 'landscape'
   week_of: string                    // the Thursday this plan post belongs to
   source: 'plan' | 'manual'
   created_at: Date
@@ -50,7 +50,7 @@ const SocialPostSchema = new Schema<ISocialPost>(
     member_id: { type: String, default: '' },
     photo_id: { type: String, default: '' },
     graphic: { type: Schema.Types.Mixed, default: null },
-    format: { type: String, enum: ['square', 'portrait'], default: 'square' },
+    format: { type: String, enum: ['square', 'portrait', 'landscape'], default: 'square' },
     week_of: { type: String, default: '' },
     source: { type: String, enum: ['plan', 'manual'], default: 'manual' },
     created_at: { type: Date, default: Date.now },

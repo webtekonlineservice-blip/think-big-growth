@@ -25,10 +25,18 @@ export interface RunOutboundOptions {
   campaignId?: string
   /**
    * Only send to prospects whose `profession` matches this term (case-insensitive
-   * substring match), regardless of which campaign they belong to. Useful for
-   * targeting e.g. "real estate agent" / "realtor" across campaigns.
+   * substring match), regardless of which campaign they belong to.
    */
   profession?: string
+  /** Total emails for this run across all campaigns (each campaign still honors its batch_size). */
+  limit?: number
+  /**
+   * 'send'    → real sends, prospects advance (default; cron + buttons)
+   * 'preview' → nothing is sent; returns who would get what
+   * 'test'    → sends the first few planned emails to `testTo` only; prospects do NOT advance
+   */
+  mode?: 'send' | 'preview' | 'test'
+  testTo?: string
 }
 
 export interface OutboundCampaignResult {
@@ -38,148 +46,195 @@ export interface OutboundCampaignResult {
   skipped?: string
 }
 
+export interface PlannedEmail {
+  prospect_id: string
+  name: string
+  company: string
+  email: string
+  campaign: string
+  step: number
+  subject: string
+}
+
 export interface RunOutboundResult {
   results: OutboundCampaignResult[]
   ran_at: string
+  mode: 'send' | 'preview' | 'test'
+  planned: PlannedEmail[]
+  sent: number
+  errors: number
+  /** Why prospects were left out of this batch, e.g. { bad_email: 82, duplicate: 4 } */
+  excluded: Record<string, number>
 }
 
+// ─── Address hygiene ─────────────────────────────────────────────────────────
+// Chamber directories often list the chamber's own inbox or the directory
+// vendor's address instead of the business. Those must never be emailed.
+const BLOCKED_DOMAINS = [
+  'placeholder.local', 'thechamber.us', 'growthzone.com', 'chamberorganizer.com', 'chambermaster.com',
+  'domain.com', 'example.com', 'example.org', 'companyname.com', 'email.com', 'yourdomain.com', 'test.com',
+  'sentry.io', 'wixpress.com', 'godaddy.com', 'squarespace.com',
+]
+const BLOCKED_LOCAL = /^(unsubscribe|noreply|no-reply|donotreply|do-not-reply|user|example|test|email|name|your\.?email|abuse|postmaster|mailer-daemon)$/i
+
+/** Returns a reason string if the address must not be emailed, or '' if it is fine. */
+export function badEmailReason(raw: string | undefined | null): string {
+  const email = (raw || '').trim().toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(email)) return 'invalid'
+  const [local, domain] = email.split('@')
+  if (BLOCKED_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`))) return 'directory_or_placeholder'
+  if (domain.includes('chamber')) return 'directory_or_placeholder'
+  if (BLOCKED_LOCAL.test(local)) return 'role_or_fake'
+  if (/\.(png|jpe?g|gif|webp|svg)$/.test(email)) return 'invalid'
+  return ''
+}
+
+const TEST_MAX = 3
+const SEND_GAP_MS = 550 // stay under Resend's default 2 requests/second
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
 /**
- * Core outbound send engine. Sends the next batch of drip emails for the
- * targeted campaign(s), honoring batch_size, per-step delays, unsubscribes,
- * and the "seat filled" auto-pause guard.
+ * Core outbound engine. Plans the next batch of drip emails across the
+ * targeted campaign(s), then previews, test-sends, or sends them.
  *
- * - No options → all active campaigns (the daily cron behavior).
- * - `campaignId` → only that campaign (used by the manual "Send Next Batch" button).
- * - `profession` → additionally restrict recipients to matching professions across campaigns.
+ * Rules: active campaigns only; skip campaigns whose seat a member holds;
+ * honor per-step delays and each campaign's batch_size; skip unsubscribed /
+ * converted prospects, bad addresses, and any address that already received
+ * (or is queued for) this sequence through another prospect record.
  */
 export async function runOutbound(options: RunOutboundOptions = {}): Promise<RunOutboundResult> {
   const { campaignId, profession } = options
+  const mode = options.mode ?? 'send'
+  const limit = Math.max(1, Math.min(200, options.limit ?? 50))
 
   await connectDB()
 
-  // Determine which BNI seats are already filled by members —
-  // we pause outreach for those professions automatically.
   const members = await Member.find({ role: { $ne: '' } }).select('role').lean()
-  const filledRoles = members
-    .map((m) => (m.role || '').toLowerCase().trim())
-    .filter(Boolean)
-
-  const isSeatFilled = (prof: string): boolean =>
-    isSeatFilledByMembers(prof, filledRoles)
+  const filledRoles = members.map((m) => (m.role || '').toLowerCase().trim()).filter(Boolean)
 
   const campaignQuery: Record<string, unknown> = { active: true }
   if (campaignId) campaignQuery._id = campaignId
+  const campaigns = await EmailCampaign.find(campaignQuery).sort({ created_at: 1 }).lean()
 
-  const campaigns = await EmailCampaign.find(campaignQuery).lean()
-  const results: OutboundCampaignResult[] = []
-
-  // Optional cross-campaign profession filter (case-insensitive substring)
   const professionRegex = profession
     ? new RegExp(profession.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
     : null
 
-  for (const campaign of campaigns) {
-    const maxStep = campaign.sequence.length
-    let sent = 0
-    let errors = 0
+  const results: OutboundCampaignResult[] = []
+  const excluded: Record<string, number> = {}
+  const bump = (k: string, n = 1) => { excluded[k] = (excluded[k] || 0) + n }
 
-    // Guard: skip campaigns whose profession seat is already filled
-    const campaignProfession = campaign.name.replace(/\s*outreach\s*/i, '').trim()
-    if (isSeatFilled(campaignProfession)) {
+  // Addresses that already got email 1 under any prospect record: never start them again.
+  const alreadyContacted = new Set(
+    (await Prospect.find({ sequence_step: { $gt: 0 } }).select('email').lean()).map((p) => (p.email || '').toLowerCase())
+  )
+  const queued = new Set<string>()
+  const now = new Date()
+
+  async function loadCandidates(c: (typeof campaigns)[number]) {
+    const q: Record<string, unknown> = {
+      campaign_id: c._id, unsubscribed: false,
+      sequence_step: { $lt: c.sequence.length },
+      status: { $nin: ['converted', 'unsubscribed'] },
+    }
+    if (professionRegex) q.profession = professionRegex
+    return Prospect.find(q).sort({ ai_score: -1, created_at: 1 }).limit(200).lean()
+  }
+  type Candidate = Awaited<ReturnType<typeof loadCandidates>>[number]
+  type Campaign = (typeof campaigns)[number]
+  type Job = { prospect: Candidate; campaign: Campaign; step: number; stepConfig: Campaign['sequence'][number] }
+  const jobs: Job[] = []
+
+  for (const campaign of campaigns) {
+    if (jobs.length >= limit) break
+    const campaignProfession = campaign.name.replace(/\s*(chamber\s*)?outreach\s*/i, '').trim()
+    if (isSeatFilledByMembers(campaignProfession, filledRoles)) {
       results.push({ campaign: campaign.name, sent: 0, errors: 0, skipped: 'seat_filled' })
       continue
     }
-
-    // Find prospects ready for next email
-    // Conditions: not unsubscribed, sequence_step < maxStep, has real email, enough days passed
-    const now = new Date()
-
-    const prospectQuery: Record<string, unknown> = {
-      campaign_id: campaign._id,
-      unsubscribed: false,
-      sequence_step: { $lt: maxStep },
-      status: { $nin: ['converted', 'unsubscribed'] },
-      email: { $not: /placeholder\.local$/ },
-    }
-    if (professionRegex) prospectQuery.profession = professionRegex
-
-    const prospects = await Prospect.find(prospectQuery)
-      .sort({ created_at: 1 })
-      .limit(campaign.batch_size)
-      .lean()
-
-    for (const prospect of prospects) {
-      const nextStep = prospect.sequence_step + 1
-      const stepConfig = campaign.sequence.find((s) => s.step === nextStep)
+    const candidates = await loadCandidates(campaign)
+    let taken = 0
+    for (const prospect of candidates) {
+      if (taken >= campaign.batch_size || jobs.length >= limit) break
+      const email = (prospect.email || '').toLowerCase()
+      const reason = badEmailReason(email)
+      if (reason) { bump('bad_email'); continue }
+      if (queued.has(email) || (prospect.sequence_step === 0 && alreadyContacted.has(email))) { bump('duplicate'); continue }
+      const step = prospect.sequence_step + 1
+      const stepConfig = campaign.sequence.find((s) => s.step === step)
       if (!stepConfig) continue
-
-      // Check delay — must have waited enough days since last send
       if (prospect.last_sent_at) {
-        const daysSinceLast = Math.floor(
-          (now.getTime() - new Date(prospect.last_sent_at).getTime()) / (1000 * 60 * 60 * 24)
-        )
-        if (daysSinceLast < stepConfig.delay_days) continue
+        const days = Math.floor((now.getTime() - new Date(prospect.last_sent_at).getTime()) / 86400000)
+        if (days < stepConfig.delay_days) { bump('waiting_for_delay'); continue }
       }
-
-      // Build email content — inject AI-personalized first line into step 1 if available
-      const subject = replacePlaceholders(stepConfig.subject, prospect)
-      let body = replacePlaceholders(stepConfig.body, prospect)
-      if (nextStep === 1 && prospect.ai_first_line && prospect.ai_first_line.trim()) {
-        // Prepend the AI-written opening line before the first paragraph
-        body = `${prospect.ai_first_line.trim()}\n\n${body}`
-      }
-
-      // Build tracked CTA URL
-      const ctaUrl = stepConfig.cta_url
-        ? `${APP_URL}/api/track/click/${prospect._id}?url=${encodeURIComponent(stepConfig.cta_url.replace('[invite_code]', campaign.invite_code))}`
-        : `${APP_URL}/api/track/click/${prospect._id}?url=${encodeURIComponent(`${APP_URL}/invite/${campaign.invite_code}`)}`
-
-      const ctaText = stepConfig.cta_text || 'Visit Think Big St. Louis →'
-
-      // Build HTML
-      const trackingPixel = `<img src="${APP_URL}/api/track/open/${prospect._id}" width="1" height="1" alt="" style="display:none;" />`
-      const unsubLink = `${APP_URL}/api/unsubscribe/${prospect.unsubscribe_token}`
-
-      // Optional hero image (e.g. event flyer). Relative paths are resolved
-      // against APP_URL so email clients get an absolute URL.
-      const imageUrl = stepConfig.image_url
-        ? (stepConfig.image_url.startsWith('http')
-            ? stepConfig.image_url
-            : `${APP_URL}${stepConfig.image_url.startsWith('/') ? '' : '/'}${stepConfig.image_url}`)
-        : ''
-
-      const html = buildEmail(body, ctaText, ctaUrl, unsubLink, trackingPixel, imageUrl)
-
-      try {
-        await getResend().emails.send({ from: FROM, to: prospect.email, subject, html })
-
-        // Update prospect
-        await Prospect.findByIdAndUpdate(prospect._id, {
-          $set: { sequence_step: nextStep, last_sent_at: now, status: `sequence_${nextStep}` },
-        })
-
-        // Log event
-        await ProspectEvent.create({
-          prospect_id: prospect._id,
-          campaign_id: campaign._id,
-          type: 'sent',
-          step: nextStep,
-        })
-
-        // Update campaign counter
-        await EmailCampaign.findByIdAndUpdate(campaign._id, { $inc: { total_sent: 1 } })
-
-        sent++
-      } catch (err) {
-        console.error(`Outbound send failed for ${prospect.email}:`, err)
-        errors++
-      }
+      queued.add(email)
+      jobs.push({ prospect, campaign, step, stepConfig })
+      taken++
     }
-
-    results.push({ campaign: campaign.name, sent, errors })
   }
 
-  return { results, ran_at: new Date().toISOString() }
+  const planned: PlannedEmail[] = jobs.map((j) => ({
+    prospect_id: j.prospect._id.toString(), name: j.prospect.name || '', company: j.prospect.company || '',
+    email: j.prospect.email, campaign: j.campaign.name, step: j.step,
+    subject: replacePlaceholders(j.stepConfig.subject, j.prospect),
+  }))
+
+  if (mode === 'preview') {
+    return { results, ran_at: now.toISOString(), mode, planned, sent: 0, errors: 0, excluded }
+  }
+
+  const toRun = mode === 'test' ? jobs.slice(0, TEST_MAX) : jobs
+  const perCampaign = new Map<string, OutboundCampaignResult>()
+  let sent = 0
+  let errors = 0
+
+  for (let i = 0; i < toRun.length; i++) {
+    const { prospect, campaign, step, stepConfig } = toRun[i]
+    const subject = replacePlaceholders(stepConfig.subject, prospect)
+    let body = replacePlaceholders(stepConfig.body, prospect)
+    if (step === 1 && prospect.ai_first_line && prospect.ai_first_line.trim()) {
+      body = `${prospect.ai_first_line.trim()}\n\n${body}`
+    }
+    const ctaUrl = stepConfig.cta_url
+      ? `${APP_URL}/api/track/click/${prospect._id}?url=${encodeURIComponent(stepConfig.cta_url.replace('[invite_code]', campaign.invite_code))}`
+      : `${APP_URL}/api/track/click/${prospect._id}?url=${encodeURIComponent(`${APP_URL}/invite/${campaign.invite_code}`)}`
+    const ctaText = stepConfig.cta_text || 'Visit Think Big St. Louis →'
+    // Test sends must not register opens against the real prospect.
+    const trackingPixel = mode === 'test' ? '' : `<img src="${APP_URL}/api/track/open/${prospect._id}" width="1" height="1" alt="" style="display:none;" />`
+    const unsubLink = `${APP_URL}/api/unsubscribe/${prospect.unsubscribe_token}`
+    const imageUrl = stepConfig.image_url
+      ? (stepConfig.image_url.startsWith('http')
+          ? stepConfig.image_url
+          : `${APP_URL}${stepConfig.image_url.startsWith('/') ? '' : '/'}${stepConfig.image_url}`)
+      : ''
+    const html = buildEmail(body, ctaText, ctaUrl, unsubLink, trackingPixel, imageUrl)
+
+    const r = perCampaign.get(campaign.name) ?? { campaign: campaign.name, sent: 0, errors: 0 }
+    perCampaign.set(campaign.name, r)
+    try {
+      if (mode === 'test') {
+        await getResend().emails.send({
+          from: FROM, to: options.testTo || 'webtekdigitalai@gmail.com',
+          subject: `[TEST → ${prospect.email}] ${subject}`, html,
+        })
+      } else {
+        await getResend().emails.send({ from: FROM, to: prospect.email, subject, html })
+        await Prospect.findByIdAndUpdate(prospect._id, {
+          $set: { sequence_step: step, last_sent_at: new Date(), status: `sequence_${step}` },
+        })
+        await ProspectEvent.create({ prospect_id: prospect._id, campaign_id: campaign._id, type: 'sent', step })
+        await EmailCampaign.findByIdAndUpdate(campaign._id, { $inc: { total_sent: 1 } })
+      }
+      r.sent++; sent++
+    } catch (err) {
+      console.error(`Outbound send failed for ${prospect.email}:`, err)
+      r.errors++; errors++
+    }
+    if (i < toRun.length - 1) await sleep(SEND_GAP_MS)
+  }
+
+  perCampaign.forEach((r) => results.push(r))
+  return { results, ran_at: now.toISOString(), mode, planned, sent, errors, excluded }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

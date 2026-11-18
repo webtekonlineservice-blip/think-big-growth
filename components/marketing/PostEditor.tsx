@@ -21,7 +21,7 @@ export interface EditorSeed {
   id?: string; week_of?: string; source?: string
   type?: SocialType; platform?: SocialPlatform; format?: GraphicFormat; date?: string; status?: SocialStatus
   member_id?: string; photo_id?: string; photoData?: string
-  title?: string; subtitle?: string; role?: string; seats?: string; cardLine?: string; content?: string
+  title?: string; subtitle?: string; role?: string; classification?: string; seats?: string; cardLine?: string; content?: string
   wrapper?: PhotoWrapper
 }
 
@@ -32,7 +32,8 @@ export function seedFromPost(p: PostRow, asCopy = false): EditorSeed {
     type: p.type, platform: p.platform, format: p.format, date: asCopy ? chicagoToday() : p.date,
     status: asCopy ? 'drafted' : p.status, member_id: p.member_id, photo_id: p.photo_id,
     title: g?.title ?? '', subtitle: g?.subtitle ?? '',
-    role: p.type === 'spotlight' ? (g?.lines?.[0] ?? '') : '',
+    role: p.type === 'spotlight' ? (g?.lines?.[0] ?? '') : p.type === 'welcome' ? (g?.lines?.[1] ?? '') : '',
+    classification: p.type === 'welcome' ? (g?.lines?.[0] ?? '') : '',
     seats: p.type === 'open_seats' ? (g?.lines ?? []).join(', ') : '',
     cardLine: g?.caption ?? '', content: asCopy ? '' : p.content,
     wrapper: (g?.wrapper as PhotoWrapper | undefined) ?? 'overlay',
@@ -53,6 +54,7 @@ export async function uploadPhoto(img: ProcessedImage, memberId = ''): Promise<s
 
 const KINDS: { id: SocialType; label: string }[] = [
   { id: 'photo', label: 'Photo' },
+  { id: 'welcome', label: 'Welcome new member' },
   { id: 'spotlight', label: 'Member spotlight' },
   { id: 'speaker', label: 'Speaker' },
   { id: 'meeting_day', label: 'Meeting day' },
@@ -69,7 +71,7 @@ const DEFAULT_TITLE: Partial<Record<SocialType, string>> = {
   visitor_invite: 'You are invited.', open_seats: 'Your seat is waiting.', recap: 'Thank you, Think Big.',
   win: 'Referrals at work.', evergreen: 'How referrals really work.', custom: 'Think Big St. Louis',
 }
-const PHOTO_KINDS: SocialType[] = ['photo', 'spotlight', 'speaker']
+const PHOTO_KINDS: SocialType[] = ['photo', 'spotlight', 'speaker', 'welcome']
 const PLATFORMS: SocialPlatform[] = ['facebook', 'linkedin', 'instagram']
 const STATUSES: SocialStatus[] = ['idea', 'drafted', 'scheduled', 'posted']
 
@@ -101,6 +103,7 @@ export default function PostEditor({
   const [title, setTitle] = useState(seed.title ?? DEFAULT_TITLE[seed.type ?? 'photo'] ?? '')
   const [subtitle, setSubtitle] = useState(seed.subtitle ?? '')
   const [role, setRole] = useState(seed.role ?? '')
+  const [classification, setClassification] = useState(seed.classification ?? '')
   const [seats, setSeats] = useState(seed.seats ?? '')
   const [cardLine, setCardLine] = useState(seed.cardLine ?? '')
   const [content, setContent] = useState(seed.content ?? '')
@@ -131,7 +134,8 @@ export default function PostEditor({
   const pickTemplate = (t: SocialType) => {
     setType(t)
     if (DEFAULT_TITLE[t] && (!title || Object.values(DEFAULT_TITLE).includes(title))) setTitle(DEFAULT_TITLE[t] as string)
-    if ((t === 'spotlight' || t === 'speaker') && member) { setTitle(member.name); setSubtitle(member.company); if (t === 'spotlight') setRole(member.role) }
+    if ((t === 'spotlight' || t === 'speaker' || t === 'welcome') && member) { setTitle(member.name); setSubtitle(member.company); if (t === 'spotlight' || t === 'welcome') setRole(member.role) }
+    if (t === 'welcome') setFormat('landscape')
   }
 
   const pickMember = (mid: string) => {
@@ -144,7 +148,7 @@ export default function PostEditor({
     kind: type as GraphicKind,
     title: title || DEFAULT_TITLE[type] || 'Think Big St. Louis',
     subtitle: subtitle || undefined,
-    lines: type === 'spotlight' ? (role ? [role] : []) : type === 'open_seats' ? seats.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
+    lines: type === 'welcome' ? [classification, role] : type === 'spotlight' ? (role ? [role] : []) : type === 'open_seats' ? seats.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
     caption: cardLine || undefined,
     dateLabel: type === 'speaker' ? `THURSDAY · ${shortUpper(nextThursday(date))}` : undefined,
     memberPhoto: effectivePhoto || undefined,
@@ -185,13 +189,13 @@ export default function PostEditor({
   const generate = async () => {
     setBusy('generate'); setMsg(null)
     try {
-      const isPerson = type === 'spotlight' || type === 'speaker'
+      const isPerson = type === 'spotlight' || type === 'speaker' || type === 'welcome'
       const res = await fetch('/api/social/caption', {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type, platform,
           facts: {
-            name: isPerson ? title : '', company: isPerson ? subtitle : '', role: type === 'spotlight' ? role : '',
+            name: isPerson ? title : '', company: isPerson ? subtitle : '', role: type === 'spotlight' || type === 'welcome' ? role : '',
             seats: type === 'open_seats' ? seats : '', details: note, topic: type === 'evergreen' ? note : '', photo_note: type === 'photo' ? note : '',
           },
         }),
@@ -305,7 +309,7 @@ export default function PostEditor({
 
             {/* Content fields */}
             <div className="grid sm:grid-cols-2 gap-3">
-              {(type === 'spotlight' || type === 'speaker') && (
+              {(type === 'spotlight' || type === 'speaker' || type === 'welcome') && (
                 <div className="sm:col-span-2">
                   <label className={LABEL}>{type === 'speaker' ? 'Speaker (member)' : 'Member'}</label>
                   <select value={memberId} onChange={(e) => pickMember(e.target.value)} className={INPUT}>
@@ -315,16 +319,22 @@ export default function PostEditor({
                 </div>
               )}
               <div className={type === 'open_seats' || type === 'meeting_day' ? 'sm:col-span-2' : ''}>
-                <label className={LABEL}>{type === 'spotlight' || type === 'speaker' ? 'Name' : 'Headline'}</label>
+                <label className={LABEL}>{type === 'spotlight' || type === 'speaker' || type === 'welcome' ? 'Name' : 'Headline'}</label>
                 <input value={title} onChange={(e) => setTitle(e.target.value)} className={INPUT} />
               </div>
-              {(type === 'spotlight' || type === 'speaker' || type === 'open_seats') && (
+              {(type === 'spotlight' || type === 'speaker' || type === 'welcome' || type === 'open_seats') && (
                 <div>
                   <label className={LABEL}>{type === 'open_seats' ? 'Supporting line' : 'Company'}</label>
                   <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} className={INPUT} />
                 </div>
               )}
-              {type === 'spotlight' && (
+              {type === 'welcome' && (
+                <div>
+                  <label className={LABEL}>Classification (on the card)</label>
+                  <input value={classification} onChange={(e) => setClassification(e.target.value)} className={INPUT} placeholder="Real Estate Services" />
+                </div>
+              )}
+              {(type === 'spotlight' || type === 'welcome') && (
                 <div>
                   <label className={LABEL}>Role</label>
                   <input value={role} onChange={(e) => setRole(e.target.value)} className={INPUT} />
@@ -369,6 +379,7 @@ export default function PostEditor({
                 <select value={format} onChange={(e) => setFormat(e.target.value as GraphicFormat)} className={INPUT}>
                   <option value="square">Square 1:1</option>
                   <option value="portrait">Portrait 4:5</option>
+                  <option value="landscape">Landscape 3:2</option>
                 </select>
               </div>
               <div>

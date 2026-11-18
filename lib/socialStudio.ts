@@ -30,6 +30,7 @@ const PLATFORM_TONE: Record<SocialPlatform, string> = {
 const TYPE_BRIEF: Record<SocialType, string> = {
   meeting_promo: "Invite local business owners to this week's meeting. Convey momentum.",
   speaker: "Preview this week's featured speaker and give people a reason to come hear them.",
+  welcome: 'Welcome a brand-new member to the chapter. Say who they are and what they do, and ask members and readers to reach out and send them business. Warm and celebratory.',
   spotlight: 'Introduce a member: who they are, what they do, and who their ideal referral is. Make readers want to refer or use them.',
   visitor_invite: 'Invite prospective guests. Lower the barrier: it is free to visit and no-pressure.',
   win: 'Celebrate a chapter win. Show the real value of showing up weekly.',
@@ -63,6 +64,7 @@ export function assemble(body: string, platform: SocialPlatform): string {
 const FALLBACK_HEADLINE: Record<SocialType, string> = {
   meeting_promo: 'Thursday, 11:30. Come see it.',
   speaker: 'Hear it live this Thursday.',
+  welcome: 'Welcome to Think Big.',
   spotlight: 'Meet a Think Big member.',
   visitor_invite: 'You are invited.',
   win: 'Referrals at work.',
@@ -80,6 +82,7 @@ export function fallbackCaption(input: StudioCaptionInput): StudioCaption {
   const hook =
     input.type === 'speaker' ? `This Thursday we're hearing from ${f.name || 'a great speaker'}${f.company ? ` of ${f.company}` : ''}.` :
     input.type === 'spotlight' ? `Meet ${f.name || 'one of our members'}${f.role ? `, our ${f.role}` : ''}${f.company ? ` at ${f.company}` : ''}.` :
+    input.type === 'welcome' ? `Please give a warm Think Big welcome to ${f.name || 'our newest member'}${f.role ? `, ${f.role}` : ''}${f.company ? ` at ${f.company}` : ''}.` :
     input.type === 'open_seats' ? `We're looking for local owners in: ${f.seats || 'several categories'}. One seat per category, and each one is exclusive.` :
     input.type === 'meeting_day' ? `Today's the day. We meet at 11:30.` :
     input.type === 'recap' ? `Thank you to everyone who showed up this week.` :

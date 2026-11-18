@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import Link from 'next/link'
+import BatchSendPanel from '@/components/marketing/BatchSendPanel'
 import {
   Send, Plus, Trash2, Zap, ToggleLeft, ToggleRight,
   Search, Upload, X, Mail, MousePointerClick, Users,
@@ -175,7 +176,7 @@ export default function OutboundPage() {
     try {
       const r = await fetch(`/api/prospects/campaigns/${selectedId}/send`, { method: 'POST', credentials: 'include' })
       const d = await r.json()
-      setSendMsg(r.ok ? `✓ Sent ${d.sent} emails` : `✗ ${d.error || 'Failed'}`)
+      setSendMsg(r.ok ? (d.skipped === 'seat_filled' ? 'Seat is filled by a member, so nothing was sent.' : `✓ Sent ${d.sent} emails`) : `✗ ${d.error || 'Failed'}`)
       if (r.ok) await fetchCampaigns()
     } catch { setSendMsg('✗ Network error') }
     setSending(false)
@@ -302,6 +303,8 @@ export default function OutboundPage() {
           </button>
         </div>
       </div>
+
+      <BatchSendPanel onSent={() => { fetchCampaigns() }} />
 
       {/* ── Body: sidebar + main ─────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">

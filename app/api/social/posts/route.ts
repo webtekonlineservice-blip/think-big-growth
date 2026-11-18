@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       member_id: typeof b.member_id === 'string' ? b.member_id : '',
       photo_id: typeof b.photo_id === 'string' ? b.photo_id : '',
       graphic: b.graphic ?? null,
-      format: b.format === 'portrait' ? 'portrait' : 'square',
+      format: b.format === 'portrait' || b.format === 'landscape' ? b.format : 'square',
       week_of: typeof b.week_of === 'string' ? b.week_of : '',
       source: b.source === 'plan' ? 'plan' : 'manual',
     })
