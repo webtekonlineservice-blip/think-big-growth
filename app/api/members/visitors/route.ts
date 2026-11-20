@@ -18,31 +18,32 @@ export async function GET(req: NextRequest) {
 
   const uid = req.nextUrl.searchParams.get('uid')
 
-  if (!uid) {
-    return NextResponse.json({ error: 'uid query parameter is required.' }, { status: 400 })
-  }
-
-  if (!session.is_admin && session.id !== uid) {
+  if (uid && !session.is_admin && session.id !== uid) {
     return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
   }
 
-  if (!mongoose.isValidObjectId(uid)) {
+  if (uid && !mongoose.isValidObjectId(uid)) {
     return NextResponse.json({ error: 'Invalid member id.' }, { status: 400 })
+  }
+  if (!uid && !session.is_admin) {
+    return NextResponse.json({ error: 'Forbidden.' }, { status: 403 })
   }
 
   try {
     await connectDB()
 
-    const visitors = await Visitor.find({ invited_by: uid })
-      .sort({ created_at: -1 })
-      .lean()
+    const visitors = uid
+      ? await Visitor.find({ invited_by: uid }).sort({ created_at: -1 }).lean()
+      : await Visitor.find({ status: 'visited' }).sort({ created_at: -1 }).lean()
 
     const result = visitors.map((v) => ({
       id: v._id.toString(),
       first_name: v.first_name,
       last_name: v.last_name,
       company: v.company,
+      business_type: v.business_type,
       status: v.status,
+      business_profile: v.business_profile ?? null,
       created_at: v.created_at.toISOString(),
     }))
 

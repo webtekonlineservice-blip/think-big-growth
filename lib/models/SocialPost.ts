@@ -4,11 +4,12 @@ export type SocialPlatform = 'facebook' | 'linkedin' | 'instagram'
 export type SocialType =
   | 'meeting_promo' | 'speaker' | 'spotlight' | 'visitor_invite' | 'win' | 'open_seats' | 'custom'
   | 'meeting_day' | 'recap' | 'evergreen' | 'photo' | 'welcome' | 'seat_open'
+  | 'community_spotlight'
 export type SocialStatus = 'idea' | 'drafted' | 'scheduled' | 'posted'
 
 export const SOCIAL_TYPES: SocialType[] = [
   'meeting_promo', 'speaker', 'spotlight', 'visitor_invite', 'win', 'open_seats', 'custom',
-  'meeting_day', 'recap', 'evergreen', 'photo', 'welcome', 'seat_open',
+  'meeting_day', 'recap', 'evergreen', 'photo', 'welcome', 'seat_open', 'community_spotlight',
 ]
 export const SOCIAL_PLATFORMS: SocialPlatform[] = ['facebook', 'linkedin', 'instagram']
 export const SOCIAL_STATUSES: SocialStatus[] = ['idea', 'drafted', 'scheduled', 'posted']
@@ -23,6 +24,22 @@ export interface SocialGraphicSpec {
   footerCta?: string
   dateLabel?: string
   wrapper?: string       // photo template style: overlay | frame | banner
+  photo_ids?: string[]
+  subject_type?: 'member' | 'visitor'
+  subject_id?: string
+  collage_layout?: 'grid' | 'featured' | 'freeform'
+  photo_layers?: SocialPhotoLayer[]
+}
+
+export interface SocialPhotoLayer {
+  photo_id: string
+  x: number
+  y: number
+  width: number
+  height: number
+  rotation: number
+  zoom: number
+  z_index: number
 }
 
 export interface ISocialPost extends Document {

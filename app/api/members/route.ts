@@ -67,6 +67,7 @@ export async function GET(req: NextRequest) {
       is_admin: m.is_admin,
       logo: m.logo ?? '',
       photo: m.photo ?? '',
+      business_profile: m.business_profile ?? null,
       created_at: m.created_at.toISOString(),
     }))
 

@@ -29,10 +29,11 @@ const PLATFORM_TONE: Record<SocialPlatform, string> = {
 
 const TYPE_BRIEF: Record<SocialType, string> = {
   meeting_promo: "Invite local business owners to this week's meeting. Convey momentum.",
-  speaker: "Preview this week's featured speaker and give people a reason to come hear them.",
+  speaker: "Promote this member's 10-minute presentation, their business, and why local owners should come hear them. Use researched business facts when supplied.",
   seat_open: 'Invite local owners in an open business category to visit and join the chapter. Membership in a referral group, never a job.',
+  community_spotlight: 'Celebrate a Think Big member or a chapter visitor. Use the reviewed business summary and services, along with supplied personal details, to write one warm, upbeat paragraph about them and their business. Briefly promote Think Big. Never call a visitor a member or invent facts.',
   welcome: 'Welcome a brand-new member to the chapter. Say who they are and what they do, and ask members and readers to reach out and send them business. Warm and celebratory.',
-  spotlight: 'Introduce a member: who they are, what they do, and who their ideal referral is. Make readers want to refer or use them.',
+  spotlight: 'Introduce a member and promote their business using the researched summary and services when supplied. Make readers want to connect or refer them.',
   visitor_invite: 'Invite prospective guests. Lower the barrier: it is free to visit and no-pressure.',
   win: 'Celebrate a chapter win. Show the real value of showing up weekly.',
   open_seats: 'Recruit for open seats. BNI allows one business per category, so each seat is exclusive. Make owners in those categories feel personally invited.',
@@ -76,14 +77,19 @@ const FALLBACK_HEADLINE: Record<SocialType, string> = {
   evergreen: 'How referrals really work.',
   photo: 'Thursday at Think Big',
   custom: 'Think Big St. Louis',
+  community_spotlight: 'Meet someone from Think Big',
 }
 
 /** Deterministic fallback when the AI is unavailable. */
 export function fallbackCaption(input: StudioCaptionInput): StudioCaption {
   const f = input.facts
+  const communityFacts = [f.business_summary, f.services, f.details].filter(Boolean).join(' ')
+  const speakerFacts = [f.role, f.business_summary, f.services, f.details].filter(Boolean).join(' ')
+  const memberFacts = [f.business_summary, f.services, f.details].filter(Boolean).join(' ')
   const hook =
-    input.type === 'speaker' ? `This Thursday we're hearing from ${f.name || 'a great speaker'}${f.company ? ` of ${f.company}` : ''}.` :
-    input.type === 'spotlight' ? `Meet ${f.name || 'one of our members'}${f.role ? `, our ${f.role}` : ''}${f.company ? ` at ${f.company}` : ''}.` :
+    input.type === 'speaker' ? `This Thursday, hear from ${f.name || 'our featured speaker'}${f.company ? ` of ${f.company}` : ''}${speakerFacts ? ` as they share ${speakerFacts}` : ' as they share their 10-minute presentation'}.` :
+    input.type === 'community_spotlight' ? `We're giving a shout-out to ${f.subject_type === 'visitor' ? 'our visitor' : 'our Think Big member'}${f.name ? `, ${f.name}` : ''}${f.company ? ` of ${f.company}` : ''}${f.role ? `, ${f.role}` : ''}. ${communityFacts || 'We love bringing local businesses together and celebrating the people who make Think Big St. Louis a welcoming community.'}` :
+    input.type === 'spotlight' ? `Meet ${f.name || 'one of our members'}${f.role ? `, our ${f.role}` : ''}${f.company ? ` at ${f.company}` : ''}.${memberFacts ? ` ${memberFacts}` : ''}` :
     input.type === 'welcome' ? `Please give a warm Think Big welcome to ${f.name || 'our newest member'}${f.role ? `, ${f.role}` : ''}${f.company ? ` at ${f.company}` : ''}.` :
     input.type === 'open_seats' ? `We're looking for local owners in: ${f.seats || 'several categories'}. One seat per category, and each one is exclusive.` :
     input.type === 'meeting_day' ? `Today's the day. We meet at 11:30.` :
@@ -114,6 +120,7 @@ export async function generateStudioCaption(input: StudioCaptionInput): Promise<
       `You write social media posts for ${CHAPTER_NAME}, a BNI referral-networking chapter in Kirkwood, MO.`,
       'Voice: genuine, local, upbeat. Sounds like a person, not a brand. No corporate jargon, no made-up statistics.',
       'NEVER invent member names, companies, results, dollar amounts or quotes. Use only the facts provided.',
+      'For a visitor, say visitor or guest; never imply they are a member or have joined. For a member, celebrate their membership accurately.',
       'DO NOT include the meeting day/time/location, any Webtek credit line, or hashtags. Those are added automatically.',
       PLATFORM_TONE[input.platform],
       'Return STRICT JSON: {"post": "<caption body>", "card_line": "<one punchy sentence under 110 characters for the image>", "headline": "<a fresh headline under 40 characters>"}',

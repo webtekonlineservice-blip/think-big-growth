@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Camera, CalendarDays, ExternalLink, Loader2, Copy, Check, Pencil, Trash2, Plus, Upload, PartyPopper, UserPlus } from 'lucide-react'
-import PostEditor, { EditorSeed, MemberLite, PhotoThumb, PostRow, seedFromPost, uploadPhoto } from '@/components/marketing/PostEditor'
+import { Camera, CalendarDays, ExternalLink, Loader2, Copy, Check, Pencil, Trash2, Plus, Upload, PartyPopper, UserPlus, Mic } from 'lucide-react'
+import PostEditor, { BusinessProfileLite, EditorSeed, MemberLite, VisitorLite, PhotoThumb, PostRow, seedFromPost, uploadPhoto } from '@/components/marketing/PostEditor'
 import QuickPost from '@/components/marketing/QuickPost'
 import SeatPost from '@/components/marketing/SeatPost'
 import { SubTabs, useView } from '@/components/marketing/SubTabs'
@@ -26,6 +26,7 @@ export default function SocialView() {
   const [posts, setPosts] = useState<PostRow[]>([])
   const [photos, setPhotos] = useState<PhotoThumb[]>([])
   const [members, setMembers] = useState<MemberLite[]>([])
+  const [visitors, setVisitors] = useState<VisitorLite[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [quick, setQuick] = useState(false)
@@ -50,26 +51,56 @@ export default function SocialView() {
     setPhotos(await r.json())
   }, [])
 
+  const loadPeople = useCallback(async () => {
+    const [mr, vr] = await Promise.all([
+      fetch('/api/members', { credentials: 'include' }),
+      fetch('/api/members/visitors', { credentials: 'include' }),
+    ])
+    if (!mr.ok) throw new Error('Could not load members.')
+    if (!vr.ok) throw new Error('Could not load visitors.')
+    const [memberRows, visitorRows] = await Promise.all([mr.json(), vr.json()])
+    const toProfile = (value: unknown): BusinessProfileLite | null => {
+      if (!value || typeof value !== 'object') return null
+      const p = value as Record<string, unknown>
+      return {
+        website: String(p.website ?? ''),
+        summary: String(p.summary ?? ''),
+        services: String(p.services ?? ''),
+        sources: Array.isArray(p.sources) ? p.sources.filter((s): s is { title: string; url: string } =>
+          !!s && typeof s === 'object' && typeof (s as Record<string, unknown>).title === 'string' && typeof (s as Record<string, unknown>).url === 'string'
+        ) : [],
+        researched_at: typeof p.researched_at === 'string' ? p.researched_at : null,
+      }
+    }
+    if (Array.isArray(memberRows)) {
+      setMembers(memberRows.map((m: Record<string, unknown>) => ({
+        id: String(m.id ?? m._id ?? ''), name: String(m.name ?? ''), role: String(m.role ?? ''),
+        company: String(m.company ?? ''), photo: String(m.photo ?? ''),
+        business_profile: toProfile(m.business_profile),
+      })))
+    }
+    if (Array.isArray(visitorRows)) {
+      setVisitors(visitorRows.map((v: Record<string, unknown>) => ({
+        id: String(v.id ?? v._id ?? ''),
+        name: `${String(v.first_name ?? '')} ${String(v.last_name ?? '')}`.trim(),
+        role: String(v.business_type ?? ''),
+        company: String(v.company ?? ''),
+        business_profile: toProfile(v.business_profile),
+      })))
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        const [mr] = await Promise.all([fetch('/api/members', { credentials: 'include' }), loadPosts(), loadPhotos()])
-        if (mr.ok) {
-          const list = await mr.json()
-          if (!cancelled && Array.isArray(list)) {
-            setMembers(list.map((m: Record<string, unknown>) => ({
-              id: String(m.id ?? m._id ?? ''), name: String(m.name ?? ''), role: String(m.role ?? ''),
-              company: String(m.company ?? ''), photo: String(m.photo ?? ''),
-            })))
-          }
-        }
+        await Promise.all([loadPeople(), loadPosts(), loadPhotos()])
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load the Social Studio.')
       } finally { if (!cancelled) setLoading(false) }
     })()
     return () => { cancelled = true }
-  }, [loadPosts, loadPhotos])
+  }, [loadPeople, loadPosts, loadPhotos])
 
   const plan = async () => {
     setPlanning(true); setPlanMsg(null)
@@ -150,7 +181,7 @@ export default function SocialView() {
       <div className="bg-gradient-to-br from-brand-blue/20 to-gray-800/40 border border-gray-700 rounded-2xl p-5 space-y-3">
         <div>
           <h1 className="text-xl font-bold text-white">Social Studio</h1>
-          <p className="text-sm text-gray-400">Take a photo, say what it is, and get a Facebook post and a LinkedIn post with a branded image.</p>
+          <p className="text-sm text-gray-400">Create branded social flyers for speakers, members, visitors, and open seats. Build a photo collage and let AI draft the caption.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={() => setQuick(true)} className="flex items-center gap-2 bg-brand-blue text-white px-5 py-3 rounded-xl text-sm font-semibold">
@@ -161,6 +192,15 @@ export default function SocialView() {
           </button>
           <button onClick={() => setEditor({ type: 'welcome', format: 'landscape', title: '' })} className="flex items-center gap-2 border border-gray-600 text-gray-200 px-4 py-3 rounded-xl text-sm">
             <PartyPopper className="w-4 h-4" /> Welcome a member
+          </button>
+          <button onClick={() => setEditor({ type: 'community_spotlight', format: 'landscape', title: '' })} className="flex items-center gap-2 border border-gray-600 text-gray-200 px-4 py-3 rounded-xl text-sm">
+            <UserPlus className="w-4 h-4" /> Feature a member or visitor
+          </button>
+          <button onClick={() => setEditor({ type: 'speaker', format: 'landscape', title: '' })} className="flex items-center gap-2 border border-gray-600 text-gray-200 px-4 py-3 rounded-xl text-sm">
+            <Mic className="w-4 h-4" /> Promote this week’s speaker
+          </button>
+          <button onClick={() => setEditor({ type: 'seat_open', format: 'landscape', title: '' })} className="flex items-center gap-2 border border-gray-600 text-gray-200 px-4 py-3 rounded-xl text-sm">
+            <UserPlus className="w-4 h-4" /> Create an open-seat flyer
           </button>
           <button onClick={plan} disabled={planning} className="flex items-center gap-2 border border-gray-600 text-gray-200 px-4 py-3 rounded-xl text-sm disabled:opacity-50">
             {planning ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarDays className="w-4 h-4" />} Plan this week
@@ -232,8 +272,9 @@ export default function SocialView() {
       {seatOpen && <SeatPost initialSeat={seatParam || undefined} onClose={() => setSeatOpen(false)} onSaved={loadPosts} />}
       {editor && (
         <PostEditor
-          seed={editor} members={members} photos={photos}
+          seed={editor} members={members} visitors={visitors} photos={photos}
           onClose={() => setEditor(null)} onSaved={loadPosts} onLibraryChanged={loadPhotos}
+          onProfileSaved={loadPeople}
         />
       )}
     </div>

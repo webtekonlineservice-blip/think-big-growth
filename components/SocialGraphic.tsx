@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import type { SocialPhotoLayer } from '@/lib/models/SocialPost'
 
 /**
  * Think Big St. Louis social graphics (HTML canvas, no external renderer).
@@ -17,6 +18,7 @@ import { useEffect, useRef, useState } from 'react'
 export type GraphicKind =
   | 'open_seats' | 'speaker' | 'spotlight' | 'meeting_promo' | 'visitor_invite' | 'win'
   | 'meeting_day' | 'recap' | 'evergreen' | 'photo' | 'welcome' | 'seat_open' | 'custom'
+  | 'community_spotlight'
 
 export type GraphicFormat = 'square' | 'portrait' | 'landscape'
 
@@ -44,6 +46,10 @@ export interface GraphicData {
   dateLabel?: string       // e.g. "THURSDAY · OCT 29" (speaker)
   wrapper?: PhotoWrapper   // photo template style
   memberPhoto?: string     // data URI or URL
+  photos?: string[]        // supporting photos for member and visitor spotlights
+  collageLayout?: 'grid' | 'featured' | 'freeform'
+  photoIds?: string[]
+  photoLayers?: SocialPhotoLayer[]
   memberLogo?: string      // fallback image
   initials?: string
 }
@@ -80,6 +86,7 @@ const EYEBROW: Record<GraphicKind, string> = {
   photo: 'THINK BIG ST. LOUIS',
   welcome: 'NEW MEMBER',
   seat_open: 'SEAT OPEN',
+  community_spotlight: 'MEMBER & VISITOR SPOTLIGHT',
   custom: 'THINK BIG ST. LOUIS',
 }
 
@@ -96,6 +103,7 @@ const DEFAULT_CTA: Record<GraphicKind, string> = {
   photo: 'Visit us this Thursday →',
   welcome: 'Reach out and welcome them →',
   seat_open: 'Visit free this Thursday →',
+  community_spotlight: 'Connect with Think Big →',
   custom: 'Visit Think Big →',
 }
 
@@ -175,6 +183,84 @@ function cover(ctx: Ctx, img: HTMLImageElement, x: number, y: number, w: number,
   const dh = img.naturalHeight * s
   ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) * focusY, dw, dh)
   ctx.restore()
+}
+
+function drawCollage(
+  ctx: Ctx, photos: HTMLImageElement[], x: number, y: number, w: number, h: number,
+  layout: 'grid' | 'featured' | 'freeform' = 'grid', radius = 16,
+  photoIds?: string[], photoLayers?: SocialPhotoLayer[]
+) {
+  const images = photos.slice(0, 4)
+  if (!images.length) return
+  if (layout === 'freeform' && photoIds && photoLayers?.length) {
+    const imagesById = new Map<string, HTMLImageElement>()
+    photoIds.slice(0, 4).forEach((id, index) => {
+      const image = images[index]
+      if (image) imagesById.set(id, image)
+    })
+    const layers = photoLayers
+      .filter((layer) => imagesById.has(layer.photo_id))
+      .slice()
+      .sort((a, b) => a.z_index - b.z_index)
+    if (layers.length) {
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(x, y, w, h)
+      ctx.clip()
+      layers.forEach((layer) => {
+        const image = imagesById.get(layer.photo_id)
+        if (!image) return
+        const tileW = layer.width * w
+        const tileH = layer.height * h
+        const centerX = x + (layer.x + layer.width / 2) * w
+        const centerY = y + (layer.y + layer.height / 2) * h
+        const border = Math.max(5, Math.min(tileW, tileH) * 0.035)
+        ctx.save()
+        ctx.translate(centerX, centerY)
+        ctx.rotate(layer.rotation * Math.PI / 180)
+        ctx.shadowColor = 'rgba(0,0,0,0.42)'
+        ctx.shadowBlur = Math.max(10, Math.min(tileW, tileH) * 0.08)
+        ctx.shadowOffsetY = Math.max(4, Math.min(tileW, tileH) * 0.025)
+        rr(ctx, -tileW / 2, -tileH / 2, tileW, tileH, 12)
+        ctx.fillStyle = WHITE
+        ctx.fill()
+        ctx.shadowColor = 'transparent'
+        ctx.shadowBlur = 0
+        ctx.shadowOffsetY = 0
+        ctx.save()
+        rr(ctx, -tileW / 2 + border, -tileH / 2 + border, tileW - border * 2, tileH - border * 2, 6)
+        ctx.clip()
+        const scale = Math.max((tileW - border * 2) / image.naturalWidth, (tileH - border * 2) / image.naturalHeight) * layer.zoom
+        const drawW = image.naturalWidth * scale
+        const drawH = image.naturalHeight * scale
+        ctx.drawImage(image, -drawW / 2, -drawH / 2, drawW, drawH)
+        ctx.restore()
+        ctx.restore()
+      })
+      ctx.restore()
+      return
+    }
+  }
+  const gap = 12
+  if (layout === 'featured' && images.length > 1) {
+    const mainW = (w - gap) * 0.62
+    const stackX = x + mainW + gap
+    const stackW = w - mainW - gap
+    const stackPhotos = images.slice(1)
+    const tileH = (h - gap * (stackPhotos.length - 1)) / stackPhotos.length
+    cover(ctx, images[0], x, y, mainW, h, radius, 0.3)
+    stackPhotos.forEach((photo, i) => cover(ctx, photo, stackX, y + i * (tileH + gap), stackW, tileH, radius, 0.3))
+    return
+  }
+  const cols = images.length === 1 ? 1 : 2
+  const rows = Math.ceil(images.length / cols)
+  const tileW = (w - gap * (cols - 1)) / cols
+  const tileH = (h - gap * (rows - 1)) / rows
+  images.forEach((photo, i) => {
+    const px = x + (i % cols) * (tileW + gap)
+    const row = Math.floor(i / cols)
+    cover(ctx, photo, px, y + row * (tileH + gap), tileW, tileH, radius, 0.3)
+  })
 }
 
 interface PillOpts { bg: string; fg: string; size?: number; padX?: number; h?: number; align?: 'left' | 'center' | 'right'; border?: string; spacing?: number }
@@ -335,7 +421,7 @@ function initialsCircle(ctx: Ctx, cx: number, cy: number, r: number, initials: s
 
 // ─── Templates ───────────────────────────────────────────────────────────────
 
-function drawSpotlight(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTMLImageElement | null) {
+function drawSpotlight(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTMLImageElement | null, photos: HTMLImageElement[]) {
   const top = HEADER_H
   const bottom = H - FOOTER_H - 28
   const ph = bottom - top
@@ -346,7 +432,9 @@ function drawSpotlight(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HT
   ctx.strokeStyle = RED
   ctx.lineWidth = 6
   ctx.stroke()
-  if (photo) {
+  if (photos.length) {
+    drawCollage(ctx, photos, px, top, pw, ph, d.collageLayout, 16, d.photoIds, d.photoLayers)
+  } else if (photo) {
     cover(ctx, photo, px, top, pw, ph, 30)
   } else {
     rr(ctx, px, top, pw, ph, 30)
@@ -408,9 +496,11 @@ function drawSpotlight(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HT
   ctx.fillText(d.footerCta || DEFAULT_CTA.spotlight, rx, Math.min(y + 40, bottom - 4))
 }
 
-function drawSpeaker(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTMLImageElement | null) {
+function drawSpeaker(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTMLImageElement | null, photos: HTMLImageElement[]) {
   const ph = Math.round(H * 0.5)
-  if (photo) {
+  if (photos.length) {
+    drawCollage(ctx, photos, 0, 0, W, ph, d.collageLayout, 0, d.photoIds, d.photoLayers)
+  } else if (photo) {
     cover(ctx, photo, 0, 0, W, ph, 0, 0.18)
   } else {
     ctx.fillStyle = '#1b1f28'
@@ -448,12 +538,80 @@ function drawSpeaker(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTML
     ctx.fillText(d.subtitle, W / 2, y + cs)
     y += cs + 24
   }
+  if (d.lines?.[0]) {
+    ctx.font = f(800, 24)
+    ctx.fillStyle = RED2
+    drawWrapped(ctx, d.lines[0], W / 2, y + 24, W - PAD * 2 - 40, 34, 2)
+    y += 68
+  }
   const story = d.caption || "Come hear this week's featured speaker share their story and expertise."
   ctx.font = f(400, 28, true)
   ctx.fillStyle = SOFT
   const maxLines = Math.max(2, Math.floor((H - FOOTER_H - 20 - y) / 42))
   drawWrapped(ctx, story, W / 2, y + 22, W - PAD * 2 - 40, 42, Math.min(maxLines, 4))
   ctx.textAlign = 'left'
+}
+
+function drawCommunitySpotlight(ctx: Ctx, W: number, H: number, d: GraphicData, photos: HTMLImageElement[]) {
+  const top = HEADER_H + 30
+  const bottom = H - FOOTER_H - 30
+  const photoX = Math.round(W * 0.52)
+  const photoW = W - photoX - PAD
+  const photoY = top
+  const photoH = bottom - top
+  const leftX = PAD
+  const leftW = photoX - leftX - 36
+
+  pill(ctx, 'MEMBER & VISITOR SPOTLIGHT', leftX, top, { bg: RED, fg: WHITE, size: 17, h: 44, padX: 18 })
+  let y = top + 92
+  const name = d.title || 'Think Big Member'
+  const nameSize = fitWrapped(ctx, name, 900, leftW, 2, 72, 40)
+  ctx.font = f(900, nameSize)
+  ctx.fillStyle = WHITE
+  y = drawWrapped(ctx, name, leftX, y + nameSize * 0.82, leftW, nameSize * 1.02, 2) + 18
+
+  if (d.subtitle) {
+    ctx.font = f(700, fitWrapped(ctx, d.subtitle, 700, leftW, 2, 32, 20))
+    ctx.fillStyle = SOFT
+    y = drawWrapped(ctx, d.subtitle, leftX, y + 18, leftW, 40, 2) + 24
+  }
+
+  const topic = d.lines?.[0]
+  if (topic) {
+    pill(ctx, 'BUSINESS / SPECIALTY', leftX, y, { bg: 'rgba(255,255,255,0.08)', fg: RED2, size: 15, h: 38, padX: 16, border: 'rgba(255,255,255,0.16)' })
+    y += 58
+    ctx.font = f(800, fitWrapped(ctx, topic, 800, leftW, 2, 32, 20))
+    ctx.fillStyle = WHITE
+    y = drawWrapped(ctx, topic, leftX, y + 22, leftW, 38, 2) + 20
+  }
+
+  const captionLines = Math.max(0, Math.min(3, Math.floor((bottom - y - 46) / 36)))
+  if (d.caption && captionLines > 0) {
+    ctx.fillStyle = 'rgba(255,255,255,0.14)'
+    ctx.fillRect(leftX, y, Math.min(110, leftW), 4)
+    ctx.font = f(400, 25)
+    ctx.fillStyle = SOFT
+    drawWrapped(ctx, d.caption, leftX, y + 42, leftW, 36, captionLines)
+  }
+
+  rr(ctx, photoX - 8, photoY - 8, photoW + 16, photoH + 16, 28)
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)'
+  ctx.lineWidth = 2
+  ctx.stroke()
+  if (!photos.length) {
+    rr(ctx, photoX, photoY, photoW, photoH, 20)
+    ctx.fillStyle = '#1b1f28'
+    ctx.fill()
+    ctx.fillStyle = MUTED
+    ctx.font = f(700, 24)
+    ctx.textAlign = 'center'
+    drawWrapped(ctx, 'Add photos to feature this person', photoX + photoW / 2, photoY + photoH / 2, photoW - 40, 34, 2)
+    ctx.textAlign = 'left'
+    return
+  }
+  drawCollage(ctx, photos, photoX, photoY, photoW, photoH, d.collageLayout, 16, d.photoIds, d.photoLayers)
 }
 
 function drawOpenSeats(ctx: Ctx, W: number, H: number, d: GraphicData) {
@@ -951,7 +1109,7 @@ function drawWelcome(ctx: Ctx, W: number, H: number, d: GraphicData, photo: HTML
  * categories. title = category, subtitle = script tagline,
  * lines = 3 "who we're looking for" lines.
  */
-function drawSeatOpen(ctx: Ctx, W: number, H: number, d: GraphicData, webtek: HTMLImageElement | null) {
+function drawSeatOpen(ctx: Ctx, W: number, H: number, d: GraphicData, webtek: HTMLImageElement | null, photos: HTMLImageElement[]) {
   const seat = (d.title || 'Your Business').trim()
   const seatUp = seat.toUpperCase()
   const fit = (d.lines || []).filter(Boolean).slice(0, 3)
@@ -980,19 +1138,26 @@ function drawSeatOpen(ctx: Ctx, W: number, H: number, d: GraphicData, webtek: HT
   // empty seat waiting for its member
   const pcx = 1250, pcy = 520
   ctx.beginPath(); ctx.arc(pcx, pcy, 210, 0, Math.PI * 2); ctx.fillStyle = WHITE; ctx.fill()
-  ctx.beginPath(); ctx.arc(pcx, pcy, 200, 0, Math.PI * 2); ctx.fillStyle = '#2c3036'; ctx.fill()
-  ctx.save()
-  ctx.setLineDash([18, 14]); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,0.35)'
-  ctx.beginPath(); ctx.arc(pcx, pcy, 170, 0, Math.PI * 2); ctx.stroke()
-  ctx.restore()
-  ctx.fillStyle = 'rgba(255,255,255,0.18)'
-  ctx.beginPath(); ctx.arc(pcx, pcy - 50, 58, 0, Math.PI * 2); ctx.fill()
-  ctx.beginPath(); ctx.ellipse(pcx, pcy + 95, 110, 70, 0, Math.PI, 0); ctx.fill()
-  ctx.fillStyle = WHITE; ctx.textAlign = 'center'
-  ctx.font = wf(900, 46)
-  ctx.fillText('YOUR SEAT', pcx, pcy + 30)
-  ctx.fillText('IS WAITING', pcx, pcy + 78)
-  ctx.textAlign = 'left'
+  if (photos.length) {
+    ctx.save()
+    ctx.beginPath(); ctx.arc(pcx, pcy, 200, 0, Math.PI * 2); ctx.clip()
+    drawCollage(ctx, photos, pcx - 200, pcy - 200, 400, 400, d.collageLayout, 0, d.photoIds, d.photoLayers)
+    ctx.restore()
+  } else {
+    ctx.beginPath(); ctx.arc(pcx, pcy, 200, 0, Math.PI * 2); ctx.fillStyle = '#2c3036'; ctx.fill()
+    ctx.save()
+    ctx.setLineDash([18, 14]); ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+    ctx.beginPath(); ctx.arc(pcx, pcy, 170, 0, Math.PI * 2); ctx.stroke()
+    ctx.restore()
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'
+    ctx.beginPath(); ctx.arc(pcx, pcy - 50, 58, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.ellipse(pcx, pcy + 95, 110, 70, 0, Math.PI, 0); ctx.fill()
+    ctx.fillStyle = WHITE; ctx.textAlign = 'center'
+    ctx.font = wf(900, 46)
+    ctx.fillText('YOUR SEAT', pcx, pcy + 30)
+    ctx.fillText('IS WAITING', pcx, pcy + 78)
+    ctx.textAlign = 'left'
+  }
 
   posterCaptionAndCredit(ctx, 'COULD THIS BE YOU?', `KNOW A GREAT ${seatUp}? TAG THEM`, webtek)
   posterFooter(ctx)
@@ -1033,32 +1198,49 @@ async function paint(canvas: HTMLCanvasElement, data: GraphicData, format: Graph
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   await ensureFonts()
-  const [photo, bni, webtek] = await Promise.all([
+  const [photo, bni, webtek, loadedCollagePhotos] = await Promise.all([
     loadImage(data.memberPhoto || data.memberLogo),
     loadImage('/BNI-Logo.png'),
     loadImage('/logo.png'),
+    Promise.all((data.photos ?? []).slice(0, 4).map(loadImage)),
   ])
+  const collageEntries = loadedCollagePhotos
+    .map((image, index) => ({ image, id: data.photoIds?.[index] ?? String(index) }))
+    .filter((entry): entry is { image: HTMLImageElement; id: string } => entry.image !== null)
+  const collagePhotos = collageEntries.map((entry) => entry.image)
+  const paintData = { ...data, photoIds: collageEntries.map((entry) => entry.id) }
 
   ctx.clearRect(0, 0, W, H)
-  if (data.kind === 'welcome') {
-    drawWelcome(ctx, W, H, data, photo, webtek)
+  if (paintData.kind === 'welcome') {
+    drawWelcome(ctx, W, H, paintData, photo, webtek)
     return
   }
-  if (data.kind === 'seat_open') {
-    drawSeatOpen(ctx, W, H, data, webtek)
+  if (paintData.kind === 'seat_open') {
+    drawSeatOpen(ctx, W, H, paintData, webtek, collagePhotos)
     return
   }
-  const usePhotoCard = data.kind === 'photo' && !!photo
-  const onRed = data.kind === 'meeting_day' || data.kind === 'visitor_invite'
+  if (paintData.kind === 'community_spotlight') {
+    drawBackground(ctx, W, H, false)
+    drawCommunitySpotlight(ctx, W, H, paintData, collagePhotos)
+    const bar = ctx.createLinearGradient(0, 0, W, 0)
+    bar.addColorStop(0, RED); bar.addColorStop(1, RED2)
+    ctx.fillStyle = bar
+    ctx.fillRect(0, 0, W, 8)
+    drawHeader(ctx, W, bni)
+    drawFooter(ctx, W, H, webtek)
+    return
+  }
+  const usePhotoCard = paintData.kind === 'photo' && !!photo
+  const onRed = paintData.kind === 'meeting_day' || paintData.kind === 'visitor_invite'
 
   if (usePhotoCard) {
-    drawPhotoCard(ctx, W, H, data, photo as HTMLImageElement)
+    drawPhotoCard(ctx, W, H, paintData, photo as HTMLImageElement)
   } else {
-    drawBackground(ctx, W, H, onRed && !['spotlight', 'speaker', 'open_seats'].includes(data.kind))
-    if (data.kind === 'spotlight') drawSpotlight(ctx, W, H, data, photo)
-    else if (data.kind === 'speaker') drawSpeaker(ctx, W, H, data, photo)
-    else if (data.kind === 'open_seats') drawOpenSeats(ctx, W, H, data)
-    else drawStatement(ctx, W, H, data)
+    drawBackground(ctx, W, H, onRed && !['spotlight', 'speaker', 'open_seats'].includes(paintData.kind))
+    if (paintData.kind === 'spotlight') drawSpotlight(ctx, W, H, paintData, photo, collagePhotos)
+    else if (paintData.kind === 'speaker') drawSpeaker(ctx, W, H, paintData, photo, collagePhotos)
+    else if (paintData.kind === 'open_seats') drawOpenSeats(ctx, W, H, paintData)
+    else drawStatement(ctx, W, H, paintData)
   }
   // top accent bar, then the shared frame on top of everything
   const bar = ctx.createLinearGradient(0, 0, W, 0)

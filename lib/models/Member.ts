@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose'
+import { BusinessProfileData, BusinessProfileSchema } from '@/lib/models/BusinessProfile'
 
 export interface IMember extends Document {
   name: string
@@ -12,6 +13,7 @@ export interface IMember extends Document {
   is_admin: boolean
   logo: string          // base64 data URI of the member's business logo (optional)
   photo: string         // base64 data URI of the member's headshot (optional)
+  business_profile: BusinessProfileData
   created_at: Date
 }
 
@@ -28,6 +30,7 @@ const MemberSchema = new Schema<IMember>(
     is_admin: { type: Boolean, default: false },
     logo: { type: String, default: '' },
     photo: { type: String, default: '' },
+    business_profile: { type: BusinessProfileSchema, default: () => ({}) },
     created_at: { type: Date, default: Date.now },
   },
   { timestamps: false }

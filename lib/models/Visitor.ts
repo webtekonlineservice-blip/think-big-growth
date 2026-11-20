@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document, Model, Types } from 'mongoose'
+import { BusinessProfileData, BusinessProfileSchema } from '@/lib/models/BusinessProfile'
 
 export type VisitorStatus = 'invited' | 'visited' | 'applied' | 'member'
 
@@ -14,6 +15,7 @@ export interface IVisitor extends Document {
   status: VisitorStatus
   visit_date: Date | null
   notes: string
+  business_profile: BusinessProfileData
   created_at: Date
 }
 
@@ -34,6 +36,7 @@ const VisitorSchema = new Schema<IVisitor>(
     },
     visit_date: { type: Date, default: null },
     notes: { type: String, default: '' },
+    business_profile: { type: BusinessProfileSchema, default: () => ({}) },
     created_at: { type: Date, default: Date.now },
   },
   { timestamps: false }

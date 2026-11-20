@@ -1,26 +1,43 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { X, Camera, Image as ImageIcon, Upload, Sparkles, Copy, Check, Loader2, Trash2 } from 'lucide-react'
-import SocialGraphic, { GraphicData, GraphicKind, GraphicFormat, PhotoWrapper, PHOTO_WRAPPERS } from '@/components/SocialGraphic'
+import { X, Camera, Image as ImageIcon, Upload, Sparkles, Copy, Check, Loader2, Trash2, GripVertical } from 'lucide-react'
+import SocialGraphic, { GraphicData, GraphicKind, GraphicFormat, PhotoWrapper, PHOTO_WRAPPERS, FORMAT_SIZE } from '@/components/SocialGraphic'
+import CollageEditor, { createPhotoLayers } from '@/components/marketing/CollageEditor'
+import type { CollagePreset, CollagePhoto } from '@/components/marketing/CollageEditor'
 import CameraCapture from '@/components/CameraCapture'
 import { processImage, ProcessedImage } from '@/lib/imageUtils'
 import { chicagoToday, nextThursday, shortUpper } from '@/lib/socialDates'
-import type { SocialType, SocialPlatform, SocialStatus } from '@/lib/models/SocialPost'
+import type { SocialPhotoLayer, SocialType, SocialPlatform, SocialStatus } from '@/lib/models/SocialPost'
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
-export interface MemberLite { id: string; name: string; role: string; company: string; photo: string }
+export interface BusinessProfileLite {
+  website: string
+  summary: string
+  services: string
+  sources: { title: string; url: string }[]
+  researched_at: string | null
+}
+export interface MemberLite {
+  id: string; name: string; role: string; company: string; photo: string
+  business_profile?: BusinessProfileLite | null
+}
+export interface VisitorLite {
+  id: string; name: string; role: string; company: string; business_profile?: BusinessProfileLite | null
+}
 export interface PhotoThumb { id: string; thumb: string; label: string; member_id: string; created_at: string }
 export interface PostRow {
   id: string; date: string; platform: SocialPlatform; type: SocialType; content: string; status: SocialStatus
   member_id: string; photo_id: string; format: GraphicFormat; week_of: string; source: string
-  graphic: { kind: string; title: string; subtitle?: string; lines?: string[]; caption?: string; dateLabel?: string; wrapper?: string } | null
+  graphic: { kind: string; title: string; subtitle?: string; lines?: string[]; caption?: string; dateLabel?: string; wrapper?: string; photo_ids?: string[]; photo_layers?: SocialPhotoLayer[]; subject_type?: 'member' | 'visitor'; subject_id?: string; collage_layout?: CollagePreset } | null
 }
 export interface EditorSeed {
   id?: string; week_of?: string; source?: string
   type?: SocialType; platform?: SocialPlatform; format?: GraphicFormat; date?: string; status?: SocialStatus
-  member_id?: string; photo_id?: string; photoData?: string
+  member_id?: string; photo_id?: string; photo_ids?: string[]; photoData?: string
+  subject_type?: 'member' | 'visitor'; subject_id?: string
+  collage_layout?: CollagePreset; photo_layers?: SocialPhotoLayer[]
   title?: string; subtitle?: string; role?: string; classification?: string; seats?: string; cardLine?: string; content?: string
   wrapper?: PhotoWrapper
 }
@@ -30,13 +47,17 @@ export function seedFromPost(p: PostRow, asCopy = false): EditorSeed {
   return {
     id: asCopy ? undefined : p.id, week_of: asCopy ? '' : p.week_of, source: asCopy ? 'manual' : p.source,
     type: p.type, platform: p.platform, format: p.format, date: asCopy ? chicagoToday() : p.date,
-    status: asCopy ? 'drafted' : p.status, member_id: p.member_id, photo_id: p.photo_id,
+    status: asCopy ? 'drafted' : p.status, member_id: p.member_id, photo_id: p.photo_id, photo_ids: g?.photo_ids ?? [],
     title: g?.title ?? '', subtitle: g?.subtitle ?? '',
-    role: p.type === 'spotlight' ? (g?.lines?.[0] ?? '') : p.type === 'welcome' ? (g?.lines?.[1] ?? '') : '',
+    role: p.type === 'spotlight' || p.type === 'community_spotlight' ? (g?.lines?.[0] ?? '') : p.type === 'welcome' ? (g?.lines?.[1] ?? '') : '',
     classification: p.type === 'welcome' ? (g?.lines?.[0] ?? '') : '',
     seats: p.type === 'open_seats' ? (g?.lines ?? []).join(', ') : p.type === 'seat_open' ? (g?.lines ?? []).join(' | ') : '',
     cardLine: g?.caption ?? '', content: asCopy ? '' : p.content,
     wrapper: (g?.wrapper as PhotoWrapper | undefined) ?? 'overlay',
+    subject_type: g?.subject_type === 'visitor' ? 'visitor' : 'member',
+    subject_id: g?.subject_id ?? '',
+    collage_layout: g?.collage_layout === 'grid' || g?.collage_layout === 'featured' ? g.collage_layout : 'freeform',
+    photo_layers: g?.photo_layers ?? [],
   }
 }
 
@@ -57,6 +78,7 @@ const KINDS: { id: SocialType; label: string }[] = [
   { id: 'welcome', label: 'Welcome new member' },
   { id: 'spotlight', label: 'Member spotlight' },
   { id: 'speaker', label: 'Speaker' },
+  { id: 'community_spotlight', label: 'Member / visitor spotlight' },
   { id: 'meeting_day', label: 'Meeting day' },
   { id: 'meeting_promo', label: 'Thursday promo' },
   { id: 'visitor_invite', label: 'Guest invite' },
@@ -73,24 +95,36 @@ const DEFAULT_TITLE: Partial<Record<SocialType, string>> = {
   win: 'Referrals at work.', evergreen: 'How referrals really work.', custom: 'Think Big St. Louis',
 }
 const PHOTO_KINDS: SocialType[] = ['photo', 'spotlight', 'speaker', 'welcome']
+const COLLAGE_KINDS: SocialType[] = ['community_spotlight', 'spotlight', 'speaker', 'seat_open']
+const MAX_FEATURE_PHOTOS = 4
 const PLATFORMS: SocialPlatform[] = ['facebook', 'linkedin', 'instagram']
 const STATUSES: SocialStatus[] = ['idea', 'drafted', 'scheduled', 'posted']
 
 const INPUT = 'w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-blue/50'
 const LABEL = 'block text-xs text-gray-500 mb-1'
 const initialsOf = (n: string) => n.split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase()
+const collageAspectRatio = (type: SocialType, format: GraphicFormat) => {
+  const { w, h } = FORMAT_SIZE[format]
+  if (type === 'speaker') return w / Math.round(h * 0.5)
+  if (type === 'spotlight') return 436 / (h - 112 - 28 - 190)
+  if (type === 'seat_open') return 1
+  const photoX = Math.round(w * 0.52)
+  return (w - photoX - 64) / (h - 190 - 112 - 60)
+}
 
 // ─── Editor ──────────────────────────────────────────────────────────────────
 
 export default function PostEditor({
-  seed, members, photos, onClose, onSaved, onLibraryChanged,
+  seed, members, visitors, photos, onClose, onSaved, onLibraryChanged, onProfileSaved,
 }: {
   seed: EditorSeed
   members: MemberLite[]
+  visitors: VisitorLite[]
   photos: PhotoThumb[]
   onClose: () => void
   onSaved: () => void
   onLibraryChanged: () => void
+  onProfileSaved: () => Promise<void>
 }) {
   const [id] = useState(seed.id)
   const [type, setType] = useState<SocialType>(seed.type ?? 'photo')
@@ -99,8 +133,14 @@ export default function PostEditor({
   const [date, setDate] = useState(seed.date ?? chicagoToday())
   const [status, setStatus] = useState<SocialStatus>(seed.status ?? 'drafted')
   const [memberId, setMemberId] = useState(seed.member_id ?? '')
+  const [featureAudience, setFeatureAudience] = useState<'member' | 'visitor'>(seed.subject_type ?? 'member')
+  const [visitorId, setVisitorId] = useState(seed.subject_type === 'visitor' ? seed.subject_id ?? '' : '')
   const [photoId, setPhotoId] = useState(seed.photo_id ?? '')
   const [photoData, setPhotoData] = useState(seed.photoData ?? '')
+  const [featurePhotoIds, setFeaturePhotoIds] = useState<string[]>(seed.photo_ids ?? [])
+  const [featurePhotoData, setFeaturePhotoData] = useState<Record<string, string>>({})
+  const [photoLayers, setPhotoLayers] = useState<SocialPhotoLayer[]>(seed.photo_layers ?? [])
+  const [draggedFeaturePhotoId, setDraggedFeaturePhotoId] = useState('')
   const [title, setTitle] = useState(seed.title ?? DEFAULT_TITLE[seed.type ?? 'photo'] ?? '')
   const [subtitle, setSubtitle] = useState(seed.subtitle ?? '')
   const [role, setRole] = useState(seed.role ?? '')
@@ -110,6 +150,12 @@ export default function PostEditor({
   const [content, setContent] = useState(seed.content ?? '')
   const [note, setNote] = useState('')
   const [wrapper, setWrapper] = useState<PhotoWrapper>(seed.wrapper ?? 'overlay')
+  const [collageLayout, setCollageLayout] = useState<CollagePreset>(seed.collage_layout ?? 'freeform')
+  const [businessWebsite, setBusinessWebsite] = useState('')
+  const [businessSummary, setBusinessSummary] = useState('')
+  const [businessServices, setBusinessServices] = useState('')
+  const [businessSources, setBusinessSources] = useState<{ title: string; url: string }[]>([])
+  const [businessResearchedAt, setBusinessResearchedAt] = useState<string | null>(null)
 
   const [showCamera, setShowCamera] = useState(false)
   const [showLibrary, setShowLibrary] = useState(false)
@@ -118,8 +164,64 @@ export default function PostEditor({
   const [copied, setCopied] = useState(false)
 
   const member = members.find((m) => m.id === memberId)
+  const visitor = visitors.find((v) => v.id === visitorId)
   const wantsPhoto = PHOTO_KINDS.includes(type)
+  const supportsBusinessProfile = type === 'community_spotlight' || type === 'spotlight' || type === 'speaker'
+  const profileSubjectType = type === 'community_spotlight' ? featureAudience : 'member'
+  const profileSubjectId = profileSubjectType === 'member' ? memberId : visitorId
   const effectivePhoto = photoData || (wantsPhoto ? member?.photo || '' : '')
+  const supportsCollage = COLLAGE_KINDS.includes(type)
+  const canUseMemberPhoto = (type === 'community_spotlight' && featureAudience === 'member') || type === 'spotlight' || type === 'speaker'
+  const featurePhotoItems = useMemo(
+    () => [
+      ...(canUseMemberPhoto && member?.photo
+        ? [{ id: 'member-photo', src: member.photo, label: `${member.name} portrait`, isMemberPhoto: true }]
+        : []),
+      ...featurePhotoIds
+        .map((id) => ({ id, src: featurePhotoData[id], label: photos.find((p) => p.id === id)?.label || 'Flyer photo', isMemberPhoto: false }))
+        .filter((p): p is { id: string; src: string; label: string; isMemberPhoto: false } => !!p.src),
+    ].slice(0, MAX_FEATURE_PHOTOS),
+    [canUseMemberPhoto, member?.photo, member?.name, featurePhotoIds, featurePhotoData, photos]
+  )
+  const featurePhotos = useMemo(
+    () => featurePhotoItems.map((p) => p.src),
+    [featurePhotoItems]
+  )
+  const collagePhotos = useMemo<CollagePhoto[]>(
+    () => featurePhotoItems.map(({ id, src, label }) => ({ id, src, label })),
+    [featurePhotoItems]
+  )
+
+  useEffect(() => {
+    const defaults = createPhotoLayers(featurePhotoItems.map((photo) => photo.id), collageLayout)
+    setPhotoLayers((current) => {
+      const byId = new Map(current.map((layer) => [layer.photo_id, layer]))
+      return defaults.map((layer) => byId.get(layer.photo_id) ?? layer)
+    })
+  }, [featurePhotoItems, collageLayout])
+
+  useEffect(() => {
+    const ids = (seed.photo_ids ?? []).slice(0, MAX_FEATURE_PHOTOS)
+    if (!ids.length) return
+    let cancelled = false
+    Promise.all(ids.map(async (id) => {
+      const r = await fetch(`/api/social/photos?id=${id}`, { credentials: 'include' })
+      const d = await r.json()
+      if (!r.ok || typeof d.data !== 'string') throw new Error(d.error || 'Could not load a flyer photo.')
+      return [id, d.data] as const
+    })).then((entries) => {
+      if (!cancelled) setFeaturePhotoData(Object.fromEntries(entries))
+    }).catch((e) => {
+      if (!cancelled) setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not load a flyer photo.' })
+    })
+    return () => { cancelled = true }
+  }, [seed.photo_ids])
+
+  useEffect(() => {
+    if (!supportsBusinessProfile) return
+    const profile = profileSubjectType === 'member' ? member?.business_profile : visitor?.business_profile
+    if (profile) setBusinessProfile(profile)
+  }, [supportsBusinessProfile, profileSubjectType, memberId, visitorId, member?.business_profile, visitor?.business_profile])
 
   // An existing post that references a library photo: load the full image once.
   useEffect(() => {
@@ -135,27 +237,70 @@ export default function PostEditor({
   const pickTemplate = (t: SocialType) => {
     setType(t)
     if (DEFAULT_TITLE[t] && (!title || Object.values(DEFAULT_TITLE).includes(title))) setTitle(DEFAULT_TITLE[t] as string)
-    if ((t === 'spotlight' || t === 'speaker' || t === 'welcome') && member) { setTitle(member.name); setSubtitle(member.company); if (t === 'spotlight' || t === 'welcome') setRole(member.role) }
-    if (t === 'welcome' || t === 'seat_open') setFormat('landscape')
+    if ((t === 'spotlight' || t === 'speaker' || t === 'welcome' || t === 'community_spotlight') && member) { setTitle(member.name); setSubtitle(member.company); if (t === 'spotlight' || t === 'welcome' || t === 'community_spotlight') setRole(member.role) }
+    if (t === 'welcome' || t === 'seat_open' || t === 'community_spotlight' || t === 'speaker') setFormat('landscape')
   }
 
   const pickMember = (mid: string) => {
     setMemberId(mid)
+    if (type === 'community_spotlight') {
+      setFeatureAudience('member')
+      setVisitorId('')
+    }
     const m = members.find((x) => x.id === mid)
-    if (m) { setTitle(m.name); setSubtitle(m.company); setRole(m.role); setPhotoData(''); setPhotoId('') }
+    if (m) {
+      setTitle(m.name); setSubtitle(m.company); setRole(m.role); setPhotoData(''); setPhotoId('')
+      setBusinessProfile(m.business_profile)
+    }
+  }
+
+  const setBusinessProfile = (profile?: BusinessProfileLite | null) => {
+    setBusinessWebsite(profile?.website ?? '')
+    setBusinessSummary(profile?.summary ?? '')
+    setBusinessServices(profile?.services ?? '')
+    setBusinessSources(profile?.sources ?? [])
+    setBusinessResearchedAt(profile?.researched_at ?? null)
+  }
+
+  const pickVisitor = (id: string) => {
+    setVisitorId(id)
+    const v = visitors.find((x) => x.id === id)
+    if (v) {
+      setMemberId('')
+      setTitle(v.name)
+      setSubtitle(v.company)
+      setRole(v.role)
+      setBusinessProfile(v.business_profile)
+    } else {
+      setBusinessProfile(null)
+    }
+  }
+
+  const changeFeatureAudience = (value: 'member' | 'visitor') => {
+    setFeatureAudience(value)
+    setMemberId('')
+    setVisitorId('')
+    setTitle('')
+    setSubtitle('')
+    setRole('')
+    setBusinessProfile(null)
   }
 
   const graphic: GraphicData = useMemo(() => ({
     kind: type as GraphicKind,
     title: title || DEFAULT_TITLE[type] || 'Think Big St. Louis',
     subtitle: subtitle || undefined,
-    lines: type === 'seat_open' ? seats.split('|').map((s) => s.trim()).filter(Boolean).slice(0, 3) : type === 'welcome' ? [classification, role] : type === 'spotlight' ? (role ? [role] : []) : type === 'open_seats' ? seats.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
+    lines: type === 'seat_open' ? seats.split('|').map((s) => s.trim()).filter(Boolean).slice(0, 3) : type === 'welcome' ? [classification, role] : type === 'spotlight' || type === 'community_spotlight' || type === 'speaker' ? (role ? [role] : []) : type === 'open_seats' ? seats.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
     caption: cardLine || undefined,
     dateLabel: type === 'speaker' ? `THURSDAY · ${shortUpper(nextThursday(date))}` : undefined,
     memberPhoto: effectivePhoto || undefined,
+    photos: supportsCollage ? featurePhotos : undefined,
+    photoIds: supportsCollage ? collagePhotos.map((photo) => photo.id) : undefined,
+    photoLayers: supportsCollage ? photoLayers : undefined,
+    collageLayout,
     wrapper: type === 'photo' ? wrapper : undefined,
     initials: initialsOf(title || 'TB'),
-  }), [type, title, subtitle, role, seats, cardLine, date, effectivePhoto, wrapper])
+  }), [type, title, subtitle, role, seats, cardLine, date, effectivePhoto, wrapper, featurePhotos, collagePhotos, photoLayers, collageLayout, supportsCollage])
 
   // ── photo actions ──
   const saveToLibrary = async (img: ProcessedImage) => {
@@ -186,17 +331,140 @@ export default function PostEditor({
     } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not load that photo.' }) } finally { setBusy('') }
   }
 
+  const toggleFeaturePhoto = async (p: PhotoThumb) => {
+    if (featurePhotoIds.includes(p.id)) {
+      setFeaturePhotoIds((ids) => ids.filter((id) => id !== p.id))
+      return
+    }
+    const memberPhotoCount = canUseMemberPhoto && member?.photo ? 1 : 0
+    if (featurePhotoIds.length >= MAX_FEATURE_PHOTOS - memberPhotoCount) {
+      setMsg({ ok: false, text: `Choose up to ${MAX_FEATURE_PHOTOS - memberPhotoCount} additional photos for the flyer.` })
+      return
+    }
+    setBusy('photo'); setMsg(null)
+    try {
+      const r = await fetch(`/api/social/photos?id=${p.id}`, { credentials: 'include' })
+      const d = await r.json()
+      if (!r.ok || typeof d.data !== 'string') throw new Error(d.error || 'Could not load that photo.')
+      setFeaturePhotoData((data) => ({ ...data, [p.id]: d.data }))
+      setFeaturePhotoIds((ids) => ids.includes(p.id) ? ids : [...ids, p.id])
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not load that photo.' })
+    } finally { setBusy('') }
+  }
+
+  const uploadFeaturePhotos = async (files: FileList | null) => {
+    if (!files?.length) return
+    const selected = Array.from(files)
+    const memberPhotoCount = canUseMemberPhoto && member?.photo ? 1 : 0
+    if (featurePhotoIds.length + selected.length > MAX_FEATURE_PHOTOS - memberPhotoCount) {
+      setMsg({ ok: false, text: `Choose no more than ${MAX_FEATURE_PHOTOS - memberPhotoCount} additional photos.` })
+      return
+    }
+    setBusy('photo'); setMsg(null)
+    let uploaded = 0
+    try {
+      for (const file of selected) {
+        const img = await processImage(file)
+        const id = await uploadPhoto(img, canUseMemberPhoto ? memberId : '')
+        uploaded += 1
+        setFeaturePhotoData((data) => ({ ...data, [id]: img.data }))
+        setFeaturePhotoIds((ids) => ids.includes(id) ? ids : [...ids, id])
+      }
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not upload the selected photos.' })
+    } finally {
+      if (uploaded) onLibraryChanged()
+      setBusy('')
+    }
+  }
+
+  const dropFeaturePhoto = (targetId: string) => {
+    if (!draggedFeaturePhotoId || draggedFeaturePhotoId === targetId) return
+    setFeaturePhotoIds((ids) => {
+      const from = ids.indexOf(draggedFeaturePhotoId)
+      const to = ids.indexOf(targetId)
+      if (from < 0 || to < 0) return ids
+      const next = ids.slice()
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+    setDraggedFeaturePhotoId('')
+  }
+
+  const researchBusiness = async () => {
+    if (!businessWebsite.trim()) {
+      setMsg({ ok: false, text: 'Enter the business’s official website first.' })
+      return
+    }
+    setBusy('research'); setMsg(null)
+    try {
+      const res = await fetch('/api/marketing/business-research', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ website: businessWebsite, company: subtitle, role }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not research this business.')
+      setBusinessWebsite(data.website)
+      setBusinessSummary(data.summary)
+      setBusinessServices(data.services)
+      setBusinessSources(data.sources)
+      setBusinessResearchedAt(data.researched_at)
+      setMsg({ ok: true, text: 'Research draft ready. Review and edit the facts, then approve to save them.' })
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not research this business.' })
+    } finally { setBusy('') }
+  }
+
+  const approveBusinessProfile = async () => {
+    if (!profileSubjectId) {
+      setMsg({ ok: false, text: `Select a saved ${profileSubjectType} record before saving its business profile.` })
+      return
+    }
+    setBusy('profile'); setMsg(null)
+    try {
+      const res = await fetch('/api/marketing/business-profile', {
+        method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject_type: profileSubjectType,
+          subject_id: profileSubjectId,
+          profile: {
+            website: businessWebsite,
+            summary: businessSummary,
+            services: businessServices,
+            sources: businessSources,
+            researched_at: businessResearchedAt,
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Could not save the business profile.')
+      setMsg({ ok: true, text: 'Approved and saved to the business profile.' })
+      try {
+        await onProfileSaved()
+      } catch {
+        setMsg({ ok: false, text: 'Business profile saved, but the directory could not be refreshed.' })
+      }
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not save the business profile.' })
+    } finally { setBusy('') }
+  }
+
   // ── caption ──
   const generate = async () => {
     setBusy('generate'); setMsg(null)
     try {
-      const isPerson = type === 'spotlight' || type === 'speaker' || type === 'welcome'
+      const isPerson = type === 'spotlight' || type === 'speaker' || type === 'welcome' || type === 'community_spotlight'
       const res = await fetch('/api/social/caption', {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type, platform,
           facts: {
-            name: isPerson ? title : '', company: isPerson ? subtitle : '', role: type === 'spotlight' || type === 'welcome' ? role : '',
+            name: isPerson ? title : '', company: isPerson ? subtitle : '', role: type === 'spotlight' || type === 'welcome' || type === 'community_spotlight' || type === 'speaker' ? role : '',
+            subject_type: type === 'community_spotlight' ? featureAudience : '',
+            business_summary: ['community_spotlight', 'spotlight', 'speaker'].includes(type) ? businessSummary : '',
+            services: ['community_spotlight', 'spotlight', 'speaker'].includes(type) ? businessServices : '',
             seats: type === 'open_seats' ? seats : '', details: note, topic: type === 'evergreen' ? note : '', photo_note: type === 'photo' ? note : '',
           },
         }),
@@ -213,11 +481,17 @@ export default function PostEditor({
     setBusy('save'); setMsg(null)
     const st = nextStatus ?? status
     const body = {
-      date, platform, type, content, status: st, member_id: memberId, photo_id: photoId, format,
+      date, platform, type, content, status: st, member_id: memberId,
+      photo_id: supportsCollage ? featurePhotoIds[0] ?? photoId : photoId, format,
       week_of: seed.week_of ?? '', source: seed.source === 'plan' ? 'plan' : 'manual',
       graphic: {
         kind: type, title: graphic.title, subtitle: graphic.subtitle ?? '', lines: graphic.lines ?? [],
         caption: cardLine, dateLabel: graphic.dateLabel ?? '', wrapper: type === 'photo' ? wrapper : '',
+        photo_ids: supportsCollage ? featurePhotoIds : [],
+        photo_layers: supportsCollage ? photoLayers : [],
+        subject_type: type === 'community_spotlight' ? featureAudience : '',
+        subject_id: type === 'community_spotlight' && featureAudience === 'visitor' ? visitorId : '',
+        collage_layout: supportsCollage ? collageLayout : 'grid',
       },
     }
     try {
@@ -269,9 +543,78 @@ export default function PostEditor({
             </div>
 
             {/* Photo */}
-            {wantsPhoto && (
+            {(wantsPhoto || supportsCollage) && (
               <div className="bg-gray-900/60 border border-gray-700 rounded-xl p-4 space-y-3">
-                <p className="text-sm font-semibold text-white">Photo</p>
+                <p className="text-sm font-semibold text-white">{supportsCollage ? 'Flyer photos' : 'Photo'}</p>
+                {supportsCollage ? (
+                  <>
+                    <p className="text-xs text-gray-500">Arrange up to four photos. Drag, resize, rotate, zoom, and layer them; a selected member’s directory photo is included when available.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <label className="flex items-center gap-1.5 bg-brand-blue text-white px-3 py-2 rounded-lg text-sm font-medium cursor-pointer">
+                        <Upload className="w-4 h-4" /> Upload photos
+                        <input type="file" accept="image/*" multiple disabled={busy === 'photo'} className="hidden" onChange={(e) => { uploadFeaturePhotos(e.target.files); e.currentTarget.value = '' }} />
+                      </label>
+                      <button onClick={() => setShowLibrary((v) => !v)} disabled={busy === 'photo'} className="flex items-center gap-1.5 border border-gray-700 text-gray-300 px-3 py-2 rounded-lg text-sm disabled:opacity-50"><ImageIcon className="w-4 h-4" /> Library ({photos.length})</button>
+                      {busy === 'photo' && <Loader2 className="w-4 h-4 animate-spin text-gray-400 self-center" />}
+                    </div>
+                    {featurePhotos.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2">
+                        {featurePhotoItems.map((photo, i) => (
+                          <div
+                            key={photo.id}
+                            draggable={!photo.isMemberPhoto}
+                            onDragStart={() => setDraggedFeaturePhotoId(photo.id)}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => dropFeaturePhoto(photo.id)}
+                            onDragEnd={() => setDraggedFeaturePhotoId('')}
+                            title={photo.isMemberPhoto ? 'Member photo stays first' : 'Drag to reorder'}
+                            className={`relative aspect-square rounded-lg overflow-hidden border border-gray-700 ${photo.isMemberPhoto ? '' : 'cursor-grab active:cursor-grabbing'}`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={photo.src} alt={`Flyer photo ${i + 1}`} className="w-full h-full object-cover" />
+                            {!photo.isMemberPhoto && <GripVertical className="absolute bottom-1 left-1 w-5 h-5 text-white drop-shadow" />}
+                            {!photo.isMemberPhoto && (
+                              <button
+                                onClick={() => setFeaturePhotoIds((ids) => ids.filter((id) => id !== photo.id))}
+                                aria-label="Remove flyer photo"
+                                className="absolute top-1 right-1 bg-black/70 text-white rounded-full px-1.5 py-0.5 text-xs"
+                              >×</button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <CollageEditor
+                      photos={collagePhotos}
+                      layers={photoLayers}
+                      preset={collageLayout}
+                      aspectRatio={collageAspectRatio(type, format)}
+                      onChange={setPhotoLayers}
+                      onPresetChange={(preset) => {
+                        setCollageLayout(preset)
+                        setPhotoLayers(createPhotoLayers(collagePhotos.map((photo) => photo.id), preset))
+                      }}
+                    />
+                    {showLibrary && (
+                      photos.length === 0 ? <p className="text-xs text-gray-500">No photos yet. Upload a few to get started.</p> : (
+                        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto">
+                          {photos.map((p) => {
+                            const selected = featurePhotoIds.includes(p.id)
+                            return (
+                              <button key={p.id} onClick={() => toggleFeaturePhoto(p)} aria-pressed={selected}
+                                className={`relative aspect-square rounded-lg overflow-hidden border ${selected ? 'border-brand-blue ring-2 ring-brand-blue' : 'border-gray-700 hover:border-brand-blue'}`}>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={p.thumb} alt={p.label || 'Library photo'} className="w-full h-full object-cover" />
+                                {selected && <Check className="absolute top-1 right-1 w-5 h-5 text-white drop-shadow" />}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )
+                    )}
+                  </>
+                ) : (
+                  <>
                 <div className="flex flex-wrap gap-2">
                   <button onClick={() => setShowCamera(true)} className="flex items-center gap-1.5 bg-brand-blue text-white px-3 py-2 rounded-lg text-sm font-medium"><Camera className="w-4 h-4" /> Take photo</button>
                   <button onClick={() => setShowLibrary((v) => !v)} className="flex items-center gap-1.5 border border-gray-700 text-gray-300 px-3 py-2 rounded-lg text-sm"><ImageIcon className="w-4 h-4" /> Library ({photos.length})</button>
@@ -305,12 +648,23 @@ export default function PostEditor({
                   </div>
                 )}
                 {type === 'photo' && !effectivePhoto && <p className="text-xs text-yellow-400">Add a photo to see the full Think Big photo frame.</p>}
+                  </>
+                )}
               </div>
             )}
 
             {/* Content fields */}
             <div className="grid sm:grid-cols-2 gap-3">
-              {(type === 'spotlight' || type === 'speaker' || type === 'welcome') && (
+              {type === 'community_spotlight' && (
+                <div className="sm:col-span-2">
+                  <label className={LABEL}>Who are we featuring?</label>
+                  <select value={featureAudience} onChange={(e) => changeFeatureAudience(e.target.value as 'member' | 'visitor')} className={INPUT}>
+                    <option value="member">Think Big member</option>
+                    <option value="visitor">Chapter visitor</option>
+                  </select>
+                </div>
+              )}
+              {(type === 'spotlight' || type === 'speaker' || type === 'welcome' || (type === 'community_spotlight' && featureAudience === 'member')) && (
                 <div className="sm:col-span-2">
                   <label className={LABEL}>{type === 'speaker' ? 'Speaker (member)' : 'Member'}</label>
                   <select value={memberId} onChange={(e) => pickMember(e.target.value)} className={INPUT}>
@@ -319,13 +673,22 @@ export default function PostEditor({
                   </select>
                 </div>
               )}
+              {type === 'community_spotlight' && featureAudience === 'visitor' && (
+                <div className="sm:col-span-2">
+                  <label className={LABEL}>Saved visitor (or enter details below)</label>
+                  <select value={visitorId} onChange={(e) => pickVisitor(e.target.value)} className={INPUT}>
+                    <option value="">Enter visitor manually</option>
+                    {visitors.map((v) => <option key={v.id} value={v.id}>{v.name}{v.company ? ` · ${v.company}` : ''}</option>)}
+                  </select>
+                </div>
+              )}
               <div className={type === 'open_seats' || type === 'meeting_day' ? 'sm:col-span-2' : ''}>
-                <label className={LABEL}>{type === 'spotlight' || type === 'speaker' || type === 'welcome' ? 'Name' : type === 'seat_open' ? 'Business category' : 'Headline'}</label>
+                <label className={LABEL}>{type === 'spotlight' || type === 'speaker' || type === 'welcome' || type === 'community_spotlight' ? 'Name' : type === 'seat_open' ? 'Business category' : 'Headline'}</label>
                 <input value={title} onChange={(e) => setTitle(e.target.value)} className={INPUT} />
               </div>
-              {(type === 'spotlight' || type === 'speaker' || type === 'welcome' || type === 'open_seats' || type === 'seat_open') && (
+              {(type === 'spotlight' || type === 'speaker' || type === 'welcome' || type === 'community_spotlight' || type === 'open_seats' || type === 'seat_open') && (
                 <div>
-                  <label className={LABEL}>{type === 'open_seats' ? 'Supporting line' : type === 'seat_open' ? 'Script line' : 'Company'}</label>
+                  <label className={LABEL}>{type === 'open_seats' ? 'Supporting line' : type === 'seat_open' ? 'Script line' : 'Business / company'}</label>
                   <input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} className={INPUT} />
                 </div>
               )}
@@ -335,11 +698,45 @@ export default function PostEditor({
                   <input value={classification} onChange={(e) => setClassification(e.target.value)} className={INPUT} placeholder="Real Estate Services" />
                 </div>
               )}
-              {(type === 'spotlight' || type === 'welcome') && (
+              {(type === 'spotlight' || type === 'welcome' || type === 'community_spotlight' || type === 'speaker') && (
                 <div>
-                  <label className={LABEL}>Role</label>
+                  <label className={LABEL}>{type === 'community_spotlight' ? 'What they do / specialty' : type === 'speaker' ? '10-minute presentation topic' : 'Role'}</label>
                   <input value={role} onChange={(e) => setRole(e.target.value)} className={INPUT} />
                 </div>
+              )}
+              {supportsBusinessProfile && (
+                <section className="sm:col-span-2 bg-gray-900/60 border border-gray-700 rounded-xl p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Business profile research</p>
+                    <p className="text-xs text-gray-500 mt-1">Research the official website, review the draft facts, then approve them to save to the selected record.</p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input value={businessWebsite} onChange={(e) => setBusinessWebsite(e.target.value)} className={INPUT} placeholder="https://business-website.com" aria-label="Official business website" />
+                    <button onClick={researchBusiness} disabled={busy === 'research' || busy === 'profile'} className="shrink-0 flex items-center justify-center gap-1.5 bg-brand-blue text-white px-3 py-2 rounded-lg text-sm disabled:opacity-50">
+                      {busy === 'research' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Research website
+                    </button>
+                  </div>
+                  <div>
+                    <label className={LABEL}>Business summary</label>
+                    <textarea value={businessSummary} onChange={(e) => setBusinessSummary(e.target.value)} rows={3} maxLength={2000} className={INPUT} placeholder="Review or edit the researched summary." />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Services and products</label>
+                    <textarea value={businessServices} onChange={(e) => setBusinessServices(e.target.value)} rows={3} maxLength={2000} className={INPUT} placeholder="Review or edit the services and products." />
+                  </div>
+                  {businessSources.length > 0 && (
+                    <div className="text-xs text-gray-500">
+                      <p>Research source{businessSources.length > 1 ? 's' : ''}{businessResearchedAt ? ` · ${new Date(businessResearchedAt).toLocaleDateString()}` : ''}</p>
+                      {businessSources.map((source) => (
+                        <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer" className="block text-brand-blue underline break-all">{source.title}: {source.url}</a>
+                      ))}
+                    </div>
+                  )}
+                  <button onClick={approveBusinessProfile} disabled={busy === 'profile' || busy === 'research' || !profileSubjectId} className="border border-green-600/50 text-green-400 px-4 py-2 rounded-lg text-sm disabled:opacity-40">
+                  {busy === 'profile' ? 'Saving profile…' : `Approve & save ${profileSubjectType} business profile`}
+                  </button>
+                  {!profileSubjectId && <p className="text-xs text-yellow-400">Choose a saved member or visitor to save this profile to the database.</p>}
+                </section>
               )}
               {type === 'seat_open' && (
                 <div className="sm:col-span-2">
@@ -368,7 +765,7 @@ export default function PostEditor({
                 </button>
               </div>
               <input value={note} onChange={(e) => setNote(e.target.value)} className={INPUT}
-                placeholder={type === 'win' ? 'What happened? (the AI only uses what you write here)' : type === 'photo' ? "What's in the photo? (optional)" : type === 'evergreen' ? 'Topic (optional)' : 'Anything the writer should know (optional)'} />
+              placeholder={type === 'speaker' ? 'What will their 10-minute talk cover? (optional)' : type === 'community_spotlight' ? 'Anything else about this person, their business, or their visit (optional)' : type === 'spotlight' ? 'Anything else people should know about this member (optional)' : type === 'win' ? 'What happened? (the AI only uses what you write here)' : type === 'photo' ? "What's in the photo? (optional)" : type === 'evergreen' ? 'Topic (optional)' : 'Anything the writer should know (optional)'} />
               <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={9} className={INPUT + ' font-sans leading-relaxed'}
                 placeholder="The caption appears here. The meeting details and the Webtek credit are added automatically." />
             </div>
