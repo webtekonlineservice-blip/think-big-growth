@@ -57,7 +57,7 @@ export function seedFromPost(p: PostRow, asCopy = false): EditorSeed {
     subject_type: g?.subject_type === 'visitor' ? 'visitor' : 'member',
     subject_id: g?.subject_id ?? '',
     collage_layout: g?.collage_layout === 'grid' || g?.collage_layout === 'featured' ? g.collage_layout : 'freeform',
-    photo_layers: g?.photo_layers ?? [],
+    photo_layers: g?.photo_layers,
   }
 }
 
@@ -140,6 +140,9 @@ export default function PostEditor({
   const [featurePhotoIds, setFeaturePhotoIds] = useState<string[]>(seed.photo_ids ?? [])
   const [featurePhotoData, setFeaturePhotoData] = useState<Record<string, string>>({})
   const [photoLayers, setPhotoLayers] = useState<SocialPhotoLayer[]>(seed.photo_layers ?? [])
+  const [includeMemberPhoto, setIncludeMemberPhoto] = useState(
+    seed.photo_layers === undefined || seed.photo_layers.some((layer) => layer.photo_id === 'member-photo')
+  )
   const [draggedFeaturePhotoId, setDraggedFeaturePhotoId] = useState('')
   const [title, setTitle] = useState(seed.title ?? DEFAULT_TITLE[seed.type ?? 'photo'] ?? '')
   const [subtitle, setSubtitle] = useState(seed.subtitle ?? '')
@@ -174,21 +177,21 @@ export default function PostEditor({
   const canUseMemberPhoto = (type === 'community_spotlight' && featureAudience === 'member') || type === 'spotlight' || type === 'speaker'
   const featurePhotoItems = useMemo(
     () => [
-      ...(canUseMemberPhoto && member?.photo
+      ...(canUseMemberPhoto && includeMemberPhoto && member?.photo
         ? [{ id: 'member-photo', src: member.photo, label: `${member.name} portrait`, isMemberPhoto: true }]
         : []),
       ...featurePhotoIds
         .map((id) => ({ id, src: featurePhotoData[id], label: photos.find((p) => p.id === id)?.label || 'Flyer photo', isMemberPhoto: false }))
         .filter((p): p is { id: string; src: string; label: string; isMemberPhoto: false } => !!p.src),
     ].slice(0, MAX_FEATURE_PHOTOS),
-    [canUseMemberPhoto, member?.photo, member?.name, featurePhotoIds, featurePhotoData, photos]
+    [canUseMemberPhoto, includeMemberPhoto, member?.photo, member?.name, featurePhotoIds, featurePhotoData, photos]
   )
   const featurePhotos = useMemo(
     () => featurePhotoItems.map((p) => p.src),
     [featurePhotoItems]
   )
   const collagePhotos = useMemo<CollagePhoto[]>(
-    () => featurePhotoItems.map(({ id, src, label }) => ({ id, src, label })),
+    () => featurePhotoItems.map(({ id, src, label }) => ({ id, src, label, removable: true })),
     [featurePhotoItems]
   )
 
@@ -331,12 +334,25 @@ export default function PostEditor({
     } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'Could not load that photo.' }) } finally { setBusy('') }
   }
 
+  const removeFeaturePhoto = (id: string) => {
+    if (id === 'member-photo') setIncludeMemberPhoto(false)
+    else setFeaturePhotoIds((ids) => ids.filter((photoId) => photoId !== id))
+  }
+
+  const toggleMemberPhoto = (include: boolean) => {
+    if (include && featurePhotoIds.length >= MAX_FEATURE_PHOTOS) {
+      setMsg({ ok: false, text: 'Remove a flyer photo before adding the member portrait.' })
+      return
+    }
+    setIncludeMemberPhoto(include)
+  }
+
   const toggleFeaturePhoto = async (p: PhotoThumb) => {
     if (featurePhotoIds.includes(p.id)) {
       setFeaturePhotoIds((ids) => ids.filter((id) => id !== p.id))
       return
     }
-    const memberPhotoCount = canUseMemberPhoto && member?.photo ? 1 : 0
+    const memberPhotoCount = canUseMemberPhoto && includeMemberPhoto && member?.photo ? 1 : 0
     if (featurePhotoIds.length >= MAX_FEATURE_PHOTOS - memberPhotoCount) {
       setMsg({ ok: false, text: `Choose up to ${MAX_FEATURE_PHOTOS - memberPhotoCount} additional photos for the flyer.` })
       return
@@ -356,7 +372,7 @@ export default function PostEditor({
   const uploadFeaturePhotos = async (files: FileList | null) => {
     if (!files?.length) return
     const selected = Array.from(files)
-    const memberPhotoCount = canUseMemberPhoto && member?.photo ? 1 : 0
+    const memberPhotoCount = canUseMemberPhoto && includeMemberPhoto && member?.photo ? 1 : 0
     if (featurePhotoIds.length + selected.length > MAX_FEATURE_PHOTOS - memberPhotoCount) {
       setMsg({ ok: false, text: `Choose no more than ${MAX_FEATURE_PHOTOS - memberPhotoCount} additional photos.` })
       return
@@ -548,7 +564,7 @@ export default function PostEditor({
                 <p className="text-sm font-semibold text-white">{supportsCollage ? 'Flyer photos' : 'Photo'}</p>
                 {supportsCollage ? (
                   <>
-                    <p className="text-xs text-gray-500">Arrange up to four photos. Drag, resize, rotate, zoom, and layer them; a selected member’s directory photo is included when available.</p>
+                    <p className="text-xs text-gray-500">Arrange up to four photos. Drag, resize, rotate, zoom, and layer them. Select a photo and choose Remove to take it out of the flyer.</p>
                     <div className="flex flex-wrap gap-2">
                       <label className="flex items-center gap-1.5 bg-brand-blue text-white px-3 py-2 rounded-lg text-sm font-medium cursor-pointer">
                         <Upload className="w-4 h-4" /> Upload photos
@@ -557,6 +573,12 @@ export default function PostEditor({
                       <button onClick={() => setShowLibrary((v) => !v)} disabled={busy === 'photo'} className="flex items-center gap-1.5 border border-gray-700 text-gray-300 px-3 py-2 rounded-lg text-sm disabled:opacity-50"><ImageIcon className="w-4 h-4" /> Library ({photos.length})</button>
                       {busy === 'photo' && <Loader2 className="w-4 h-4 animate-spin text-gray-400 self-center" />}
                     </div>
+                    {canUseMemberPhoto && member?.photo && (
+                      <label className="inline-flex items-center gap-2 text-xs text-gray-400">
+                        <input type="checkbox" checked={includeMemberPhoto} onChange={(event) => toggleMemberPhoto(event.target.checked)} />
+                        Include member portrait
+                      </label>
+                    )}
                     {featurePhotos.length > 0 && (
                       <div className="grid grid-cols-4 gap-2">
                         {featurePhotoItems.map((photo, i) => (
@@ -573,13 +595,16 @@ export default function PostEditor({
                             {/* eslint-disable-next-line @next/next/no-img-element */}
                             <img src={photo.src} alt={`Flyer photo ${i + 1}`} className="w-full h-full object-cover" />
                             {!photo.isMemberPhoto && <GripVertical className="absolute bottom-1 left-1 w-5 h-5 text-white drop-shadow" />}
-                            {!photo.isMemberPhoto && (
-                              <button
-                                onClick={() => setFeaturePhotoIds((ids) => ids.filter((id) => id !== photo.id))}
-                                aria-label="Remove flyer photo"
-                                className="absolute top-1 right-1 bg-black/70 text-white rounded-full px-1.5 py-0.5 text-xs"
-                              >×</button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                removeFeaturePhoto(photo.id)
+                              }}
+                              aria-label="Remove flyer photo"
+                              title="Remove from flyer"
+                              className="absolute top-1 right-1 bg-black/75 text-white rounded-full w-7 h-7 grid place-items-center text-base leading-none hover:bg-red-700"
+                            >×</button>
                           </div>
                         ))}
                       </div>
@@ -590,6 +615,7 @@ export default function PostEditor({
                       preset={collageLayout}
                       aspectRatio={collageAspectRatio(type, format)}
                       onChange={setPhotoLayers}
+                      onRemove={removeFeaturePhoto}
                       onPresetChange={(preset) => {
                         setCollageLayout(preset)
                         setPhotoLayers(createPhotoLayers(collagePhotos.map((photo) => photo.id), preset))

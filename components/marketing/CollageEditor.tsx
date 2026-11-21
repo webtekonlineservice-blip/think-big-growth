@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent } from 'react'
-import { ArrowDownToLine, ArrowUpToLine, GripVertical, RotateCw, Scaling } from 'lucide-react'
+import { ArrowDownToLine, ArrowUpToLine, GripVertical, RotateCw, Scaling, Trash2 } from 'lucide-react'
 import type { SocialPhotoLayer } from '@/lib/models/SocialPost'
 
 export type CollagePreset = 'grid' | 'featured' | 'freeform'
-export interface CollagePhoto { id: string; label: string; src: string }
+export interface CollagePhoto { id: string; label: string; src: string; removable?: boolean }
 
 interface PointerInteraction {
   id: string
@@ -62,7 +62,7 @@ export function createPhotoLayers(ids: string[], preset: CollagePreset): SocialP
 }
 
 export default function CollageEditor({
-  photos, layers, preset, aspectRatio, onChange, onPresetChange,
+  photos, layers, preset, aspectRatio, onChange, onPresetChange, onRemove,
 }: {
   photos: CollagePhoto[]
   layers: SocialPhotoLayer[]
@@ -70,6 +70,7 @@ export default function CollageEditor({
   aspectRatio: number
   onChange: (layers: SocialPhotoLayer[]) => void
   onPresetChange: (preset: CollagePreset) => void
+  onRemove: (photoId: string) => void
 }) {
   const stageRef = useRef<HTMLDivElement>(null)
   const interaction = useRef<PointerInteraction | null>(null)
@@ -248,6 +249,12 @@ export default function CollageEditor({
             <button type="button" onClick={() => moveLayer('front')} className="flex items-center gap-1 border border-gray-700 rounded-lg px-2.5 py-2 text-xs text-gray-300 hover:text-white">
               <ArrowUpToLine className="w-3.5 h-3.5" /> Bring forward
             </button>
+            {selectedPhoto.removable !== false && (
+              <button type="button" onClick={() => onRemove(selected.photo_id)} aria-label={`Remove ${selectedPhoto.label} from collage`}
+                className="flex items-center gap-1 border border-red-900/70 rounded-lg px-2.5 py-2 text-xs text-red-300 hover:text-red-200">
+                <Trash2 className="w-3.5 h-3.5" /> Remove
+              </button>
+            )}
           </div>
         </div>
       )}
