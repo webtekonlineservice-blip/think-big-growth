@@ -5,7 +5,7 @@ import type { PointerEvent } from 'react'
 import { ArrowDownToLine, ArrowUpToLine, GripVertical, RotateCw, Scaling, Trash2 } from 'lucide-react'
 import type { SocialPhotoLayer } from '@/lib/models/SocialPost'
 
-export type CollagePreset = 'grid' | 'featured' | 'freeform'
+export type CollagePreset = 'grid' | 'featured' | 'freeform' | 'mosaic' | 'strip' | 'stack'
 export interface CollagePhoto { id: string; label: string; src: string; removable?: boolean }
 
 interface PointerInteraction {
@@ -23,7 +23,7 @@ interface PointerInteraction {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
-export function createPhotoLayers(ids: string[], preset: CollagePreset): SocialPhotoLayer[] {
+export function createPhotoLayers(ids: string[], preset: CollagePreset, aspectRatio = 1): SocialPhotoLayer[] {
   const count = ids.length
   return ids.map((photo_id, index) => {
     let x = 0.04, y = 0.06, width = 0.44, height = 0.42, rotation = 0
@@ -45,6 +45,54 @@ export function createPhotoLayers(ids: string[], preset: CollagePreset): SocialP
         height = (0.84 - gap * (remaining - 1)) / remaining
         x = 0.65
         y = 0.08 + (index - 1) * (height + gap)
+      }
+    } else if (preset === 'mosaic') {
+      if (count === 1) {
+        x = 0.10; y = 0.08; width = 0.80; height = 0.84
+      } else if (index === 0) {
+        x = 0.04; y = 0.06; width = 0.57; height = 0.88; rotation = -1
+      } else if (index === 1) {
+        x = 0.63; y = 0.06; width = 0.33; height = count === 2 ? 0.88 : 0.42; rotation = 2
+      } else if (index === 2) {
+        x = 0.63; y = 0.52; width = 0.33; height = 0.42; rotation = -2
+      } else {
+        x = 0.34; y = 0.68; width = 0.25; height = 0.25; rotation = 3
+      }
+    } else if (preset === 'strip') {
+      const gap = 0.025
+      if (aspectRatio > 1.3) {
+        width = (0.92 - gap * (count - 1)) / count
+        height = 0.76
+        x = 0.04 + index * (width + gap)
+        y = 0.12
+      } else {
+        width = 0.84
+        height = (0.88 - gap * (count - 1)) / count
+        x = 0.08
+        y = 0.06 + index * (height + gap)
+      }
+    } else if (preset === 'stack') {
+      if (count === 1) {
+        x = 0.16; y = 0.12; width = 0.68; height = 0.76; rotation = -2
+      } else if (count === 2) {
+        x = index === 0 ? 0.08 : 0.36
+        y = index === 0 ? 0.16 : 0.12
+        width = 0.58; height = 0.68; rotation = index === 0 ? -6 : 6
+      } else if (count === 3) {
+        const placements: [number, number, number, number, number][] = [
+          [0.04, 0.16, 0.58, 0.68, -6],
+          [0.42, 0.09, 0.54, 0.60, 5],
+          [0.25, 0.34, 0.58, 0.58, -2],
+        ]
+        ;[x, y, width, height, rotation] = placements[index]
+      } else {
+        const placements: [number, number, number, number, number][] = [
+          [0.05, 0.12, 0.50, 0.53, -6],
+          [0.44, 0.10, 0.50, 0.52, 5],
+          [0.11, 0.42, 0.50, 0.50, 3],
+          [0.42, 0.40, 0.50, 0.50, -4],
+        ]
+        ;[x, y, width, height, rotation] = placements[index]
       }
     } else if (count === 1) {
       x = 0.17; y = 0.12; width = 0.66; height = 0.76; rotation = -1
@@ -162,11 +210,14 @@ export default function CollageEditor({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-gray-400">Drag to place · corner to resize · handle to rotate · use layers to overlap photos</p>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           {([
             ['freeform', 'Freeform'],
             ['grid', 'Grid'],
             ['featured', 'Feature + stack'],
+            ['mosaic', 'Mosaic'],
+            ['strip', 'Film strip'],
+            ['stack', 'Polaroid stack'],
           ] as const).map(([value, label]) => (
             <button key={value} type="button" onClick={() => onPresetChange(value)}
               className={`px-2.5 py-1 rounded-full text-xs border ${preset === value ? 'bg-brand-blue border-brand-blue text-white' : 'border-gray-700 text-gray-400 hover:text-white'}`}>

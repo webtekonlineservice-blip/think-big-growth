@@ -8,7 +8,7 @@ import type { CollagePreset, CollagePhoto } from '@/components/marketing/Collage
 import CameraCapture from '@/components/CameraCapture'
 import { processImage, ProcessedImage } from '@/lib/imageUtils'
 import { chicagoToday, nextThursday, shortUpper } from '@/lib/socialDates'
-import type { SocialPhotoLayer, SocialType, SocialPlatform, SocialStatus } from '@/lib/models/SocialPost'
+import type { SocialFlyerTemplate, SocialPhotoLayer, SocialType, SocialPlatform, SocialStatus } from '@/lib/models/SocialPost'
 
 // ─── Shared types ────────────────────────────────────────────────────────────
 
@@ -30,14 +30,14 @@ export interface PhotoThumb { id: string; thumb: string; label: string; member_i
 export interface PostRow {
   id: string; date: string; platform: SocialPlatform; type: SocialType; content: string; status: SocialStatus
   member_id: string; photo_id: string; format: GraphicFormat; week_of: string; source: string
-  graphic: { kind: string; title: string; subtitle?: string; lines?: string[]; caption?: string; dateLabel?: string; wrapper?: string; photo_ids?: string[]; photo_layers?: SocialPhotoLayer[]; subject_type?: 'member' | 'visitor'; subject_id?: string; collage_layout?: CollagePreset } | null
+  graphic: { kind: string; title: string; subtitle?: string; lines?: string[]; caption?: string; dateLabel?: string; wrapper?: string; photo_ids?: string[]; photo_layers?: SocialPhotoLayer[]; subject_type?: 'member' | 'visitor'; subject_id?: string; collage_layout?: CollagePreset; flyer_template?: SocialFlyerTemplate } | null
 }
 export interface EditorSeed {
   id?: string; week_of?: string; source?: string
   type?: SocialType; platform?: SocialPlatform; format?: GraphicFormat; date?: string; status?: SocialStatus
   member_id?: string; photo_id?: string; photo_ids?: string[]; photoData?: string
   subject_type?: 'member' | 'visitor'; subject_id?: string
-  collage_layout?: CollagePreset; photo_layers?: SocialPhotoLayer[]
+  collage_layout?: CollagePreset; photo_layers?: SocialPhotoLayer[]; flyer_template?: SocialFlyerTemplate
   title?: string; subtitle?: string; role?: string; classification?: string; seats?: string; cardLine?: string; content?: string
   wrapper?: PhotoWrapper
 }
@@ -56,8 +56,9 @@ export function seedFromPost(p: PostRow, asCopy = false): EditorSeed {
     wrapper: (g?.wrapper as PhotoWrapper | undefined) ?? 'overlay',
     subject_type: g?.subject_type === 'visitor' ? 'visitor' : 'member',
     subject_id: g?.subject_id ?? '',
-    collage_layout: g?.collage_layout === 'grid' || g?.collage_layout === 'featured' ? g.collage_layout : 'freeform',
+    collage_layout: g?.collage_layout ?? 'freeform',
     photo_layers: g?.photo_layers,
+    flyer_template: g?.flyer_template ?? 'classic',
   }
 }
 
@@ -154,6 +155,7 @@ export default function PostEditor({
   const [note, setNote] = useState('')
   const [wrapper, setWrapper] = useState<PhotoWrapper>(seed.wrapper ?? 'overlay')
   const [collageLayout, setCollageLayout] = useState<CollagePreset>(seed.collage_layout ?? 'freeform')
+  const [flyerTemplate, setFlyerTemplate] = useState<SocialFlyerTemplate>(seed.flyer_template ?? 'classic')
   const [businessWebsite, setBusinessWebsite] = useState('')
   const [businessSummary, setBusinessSummary] = useState('')
   const [businessServices, setBusinessServices] = useState('')
@@ -172,9 +174,11 @@ export default function PostEditor({
   const supportsBusinessProfile = type === 'community_spotlight' || type === 'spotlight' || type === 'speaker'
   const profileSubjectType = type === 'community_spotlight' ? featureAudience : 'member'
   const profileSubjectId = profileSubjectType === 'member' ? memberId : visitorId
-  const effectivePhoto = photoData || (wantsPhoto ? member?.photo || '' : '')
   const supportsCollage = COLLAGE_KINDS.includes(type)
+  const supportsFlyerTemplates = type === 'community_spotlight' || type === 'spotlight' || type === 'speaker'
   const canUseMemberPhoto = (type === 'community_spotlight' && featureAudience === 'member') || type === 'spotlight' || type === 'speaker'
+  const memberPortraitOmitted = supportsCollage && canUseMemberPhoto && !includeMemberPhoto
+  const effectivePhoto = photoData || (wantsPhoto && !memberPortraitOmitted ? member?.photo || '' : '')
   const featurePhotoItems = useMemo(
     () => [
       ...(canUseMemberPhoto && includeMemberPhoto && member?.photo
@@ -196,12 +200,12 @@ export default function PostEditor({
   )
 
   useEffect(() => {
-    const defaults = createPhotoLayers(featurePhotoItems.map((photo) => photo.id), collageLayout)
+    const defaults = createPhotoLayers(featurePhotoItems.map((photo) => photo.id), collageLayout, collageAspectRatio(type, format))
     setPhotoLayers((current) => {
       const byId = new Map(current.map((layer) => [layer.photo_id, layer]))
       return defaults.map((layer) => byId.get(layer.photo_id) ?? layer)
     })
-  }, [featurePhotoItems, collageLayout])
+  }, [featurePhotoItems, collageLayout, type, format])
 
   useEffect(() => {
     const ids = (seed.photo_ids ?? []).slice(0, MAX_FEATURE_PHOTOS)
@@ -301,9 +305,10 @@ export default function PostEditor({
     photoIds: supportsCollage ? collagePhotos.map((photo) => photo.id) : undefined,
     photoLayers: supportsCollage ? photoLayers : undefined,
     collageLayout,
+    flyerTemplate: supportsFlyerTemplates ? flyerTemplate : 'classic',
     wrapper: type === 'photo' ? wrapper : undefined,
     initials: initialsOf(title || 'TB'),
-  }), [type, title, subtitle, role, seats, cardLine, date, effectivePhoto, wrapper, featurePhotos, collagePhotos, photoLayers, collageLayout, supportsCollage])
+  }), [type, title, subtitle, role, seats, cardLine, date, effectivePhoto, wrapper, featurePhotos, collagePhotos, photoLayers, collageLayout, flyerTemplate, supportsCollage, supportsFlyerTemplates])
 
   // ── photo actions ──
   const saveToLibrary = async (img: ProcessedImage) => {
@@ -505,6 +510,7 @@ export default function PostEditor({
         caption: cardLine, dateLabel: graphic.dateLabel ?? '', wrapper: type === 'photo' ? wrapper : '',
         photo_ids: supportsCollage ? featurePhotoIds : [],
         photo_layers: supportsCollage ? photoLayers : [],
+        flyer_template: supportsFlyerTemplates ? flyerTemplate : 'classic',
         subject_type: type === 'community_spotlight' ? featureAudience : '',
         subject_id: type === 'community_spotlight' && featureAudience === 'visitor' ? visitorId : '',
         collage_layout: supportsCollage ? collageLayout : 'grid',
@@ -618,9 +624,28 @@ export default function PostEditor({
                       onRemove={removeFeaturePhoto}
                       onPresetChange={(preset) => {
                         setCollageLayout(preset)
-                        setPhotoLayers(createPhotoLayers(collagePhotos.map((photo) => photo.id), preset))
+                        setPhotoLayers(createPhotoLayers(collagePhotos.map((photo) => photo.id), preset, collageAspectRatio(type, format)))
                       }}
                     />
+                    {supportsFlyerTemplates && (
+                      <div className="space-y-2 border-t border-gray-800 pt-3">
+                        <p className="text-xs font-medium text-gray-300">Flyer design</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {([
+                            ['classic', 'Classic', 'Existing branded layout'],
+                            ['photo-top', 'Photo-led', 'Large collage above the story'],
+                            ['editorial', 'Editorial split', 'Photo column beside the story'],
+                          ] as const).map(([value, label, description]) => (
+                            <button key={value} type="button" onClick={() => setFlyerTemplate(value)}
+                              aria-pressed={flyerTemplate === value}
+                              className={`rounded-lg border p-2 text-left ${flyerTemplate === value ? 'border-brand-blue bg-brand-blue/10 text-white' : 'border-gray-700 text-gray-300 hover:border-gray-500'}`}>
+                              <span className="block text-xs font-semibold">{label}</span>
+                              <span className="mt-1 block text-[11px] text-gray-500">{description}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {showLibrary && (
                       photos.length === 0 ? <p className="text-xs text-gray-500">No photos yet. Upload a few to get started.</p> : (
                         <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto">

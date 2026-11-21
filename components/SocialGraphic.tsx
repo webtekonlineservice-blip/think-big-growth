@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type { SocialPhotoLayer } from '@/lib/models/SocialPost'
+import type { SocialFlyerTemplate, SocialPhotoLayer } from '@/lib/models/SocialPost'
 
 /**
  * Think Big St. Louis social graphics (HTML canvas, no external renderer).
@@ -47,7 +47,8 @@ export interface GraphicData {
   wrapper?: PhotoWrapper   // photo template style
   memberPhoto?: string     // data URI or URL
   photos?: string[]        // supporting photos for member and visitor spotlights
-  collageLayout?: 'grid' | 'featured' | 'freeform'
+  collageLayout?: 'grid' | 'featured' | 'freeform' | 'mosaic' | 'strip' | 'stack'
+  flyerTemplate?: SocialFlyerTemplate
   photoIds?: string[]
   photoLayers?: SocialPhotoLayer[]
   memberLogo?: string      // fallback image
@@ -187,12 +188,12 @@ function cover(ctx: Ctx, img: HTMLImageElement, x: number, y: number, w: number,
 
 function drawCollage(
   ctx: Ctx, photos: HTMLImageElement[], x: number, y: number, w: number, h: number,
-  layout: 'grid' | 'featured' | 'freeform' = 'grid', radius = 16,
+  layout: 'grid' | 'featured' | 'freeform' | 'mosaic' | 'strip' | 'stack' = 'grid', radius = 16,
   photoIds?: string[], photoLayers?: SocialPhotoLayer[]
 ) {
   const images = photos.slice(0, 4)
   if (!images.length) return
-  if (layout === 'freeform' && photoIds && photoLayers?.length) {
+  if (photoIds && photoLayers?.length) {
     const imagesById = new Map<string, HTMLImageElement>()
     photoIds.slice(0, 4).forEach((id, index) => {
       const image = images[index]
@@ -612,6 +613,99 @@ function drawCommunitySpotlight(ctx: Ctx, W: number, H: number, d: GraphicData, 
     return
   }
   drawCollage(ctx, photos, photoX, photoY, photoW, photoH, d.collageLayout, 16, d.photoIds, d.photoLayers)
+}
+
+function drawFlyerStory(
+  ctx: Ctx, d: GraphicData, x: number, y: number, w: number, bottom: number, align: 'left' | 'center'
+) {
+  const center = align === 'center'
+  const textX = center ? x + w / 2 : x
+  const kicker = d.kind === 'speaker'
+    ? (d.dateLabel ? `SPEAKER · ${d.dateLabel}` : 'SPEAKER OF THE WEEK')
+    : d.kind === 'spotlight' ? 'MEMBER SPOTLIGHT' : 'MEMBER / VISITOR SPOTLIGHT'
+  pill(ctx, kicker, textX, y, { bg: RED, fg: WHITE, size: 18, h: 44, padX: 20, align })
+  y += 68
+
+  const title = d.title || (d.kind === 'speaker' ? 'Speaker' : 'Think Big Member')
+  const titleSize = fitWrapped(ctx, title, 900, w, 2, Math.min(82, Math.floor(w * 0.13)), 38)
+  ctx.font = f(900, titleSize)
+  ctx.fillStyle = WHITE
+  ctx.textAlign = align
+  y = drawWrapped(ctx, title, textX, y + titleSize * 0.82, w, titleSize * 1.04, 2) + 10
+
+  if (d.subtitle) {
+    const size = fitWrapped(ctx, d.subtitle, 700, w, 2, Math.min(32, Math.floor(w * 0.07)), 19)
+    ctx.font = f(700, size)
+    ctx.fillStyle = SOFT
+    y = drawWrapped(ctx, d.subtitle, textX, y + 8, w, size * 1.25, 2) + 10
+  }
+
+  const topic = d.lines?.[0]
+  if (topic) {
+    ctx.font = f(800, fitWrapped(ctx, topic, 800, w, 2, Math.min(27, Math.floor(w * 0.06)), 17))
+    ctx.fillStyle = RED2
+    y = drawWrapped(ctx, topic, textX, y + 10, w, 34, 2) + 4
+  }
+
+  const captionLines = Math.max(0, Math.min(3, Math.floor((bottom - y - 16) / 32)))
+  if (d.caption && captionLines > 0) {
+    ctx.font = f(400, 23)
+    ctx.fillStyle = SOFT
+    drawWrapped(ctx, d.caption, textX, y + 24, w, 32, captionLines)
+  }
+  ctx.textAlign = 'left'
+}
+
+function drawStyledFlyer(
+  ctx: Ctx, W: number, H: number, d: GraphicData, photos: HTMLImageElement[],
+  photo: HTMLImageElement | null, template: Exclude<SocialFlyerTemplate, 'classic'>
+) {
+  drawBackground(ctx, W, H, false)
+  const top = HEADER_H + 24
+  const bottom = H - FOOTER_H - 28
+
+  if (template === 'photo-top') {
+    const photoH = Math.min(Math.round(H * 0.31), bottom - top - 370)
+    if (photos.length) {
+      drawCollage(ctx, photos, PAD, top, W - PAD * 2, photoH, d.collageLayout, 18, d.photoIds, d.photoLayers)
+    } else if (photo) {
+      cover(ctx, photo, PAD, top, W - PAD * 2, photoH, 18)
+    } else {
+      rr(ctx, PAD, top, W - PAD * 2, photoH, 18)
+      ctx.fillStyle = '#1b1f28'
+      ctx.fill()
+      initialsCircle(ctx, W / 2, top + photoH / 2, Math.min(photoH * 0.32, 130), d.initials || 'TB')
+    }
+    const ruleY = top + photoH + 22
+    ctx.fillStyle = RED
+    ctx.fillRect(PAD, ruleY, W - PAD * 2, 4)
+    drawFlyerStory(ctx, d, PAD, ruleY + 22, W - PAD * 2, bottom, 'center')
+    return
+  }
+
+  const photoX = PAD
+  const photoY = top
+  const photoW = Math.round((W - PAD * 3) * 0.42)
+  const photoH = bottom - top
+  const textX = photoX + photoW + PAD
+  const textW = W - textX - PAD
+  rr(ctx, photoX - 10, photoY - 10, photoW + 20, photoH + 20, 26)
+  ctx.fillStyle = 'rgba(255,255,255,0.06)'
+  ctx.fill()
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)'
+  ctx.lineWidth = 2
+  ctx.stroke()
+  if (photos.length) {
+    drawCollage(ctx, photos, photoX, photoY, photoW, photoH, d.collageLayout, 16, d.photoIds, d.photoLayers)
+  } else if (photo) {
+    cover(ctx, photo, photoX, photoY, photoW, photoH, 16)
+  } else {
+    rr(ctx, photoX, photoY, photoW, photoH, 16)
+    ctx.fillStyle = '#1b1f28'
+    ctx.fill()
+    initialsCircle(ctx, photoX + photoW / 2, photoY + photoH / 2, Math.min(photoW * 0.3, 130), d.initials || 'TB')
+  }
+  drawFlyerStory(ctx, d, textX, photoY + 22, textW, bottom, 'left')
 }
 
 function drawOpenSeats(ctx: Ctx, W: number, H: number, d: GraphicData) {
@@ -1220,8 +1314,12 @@ async function paint(canvas: HTMLCanvasElement, data: GraphicData, format: Graph
     return
   }
   if (paintData.kind === 'community_spotlight') {
-    drawBackground(ctx, W, H, false)
-    drawCommunitySpotlight(ctx, W, H, paintData, collagePhotos)
+    if (paintData.flyerTemplate && paintData.flyerTemplate !== 'classic') {
+      drawStyledFlyer(ctx, W, H, paintData, collagePhotos, photo, paintData.flyerTemplate)
+    } else {
+      drawBackground(ctx, W, H, false)
+      drawCommunitySpotlight(ctx, W, H, paintData, collagePhotos)
+    }
     const bar = ctx.createLinearGradient(0, 0, W, 0)
     bar.addColorStop(0, RED); bar.addColorStop(1, RED2)
     ctx.fillStyle = bar
@@ -1237,8 +1335,19 @@ async function paint(canvas: HTMLCanvasElement, data: GraphicData, format: Graph
     drawPhotoCard(ctx, W, H, paintData, photo as HTMLImageElement)
   } else {
     drawBackground(ctx, W, H, onRed && !['spotlight', 'speaker', 'open_seats'].includes(paintData.kind))
-    if (paintData.kind === 'spotlight') drawSpotlight(ctx, W, H, paintData, photo, collagePhotos)
-    else if (paintData.kind === 'speaker') drawSpeaker(ctx, W, H, paintData, photo, collagePhotos)
+    if (paintData.kind === 'spotlight') {
+      if (paintData.flyerTemplate && paintData.flyerTemplate !== 'classic') {
+        drawStyledFlyer(ctx, W, H, paintData, collagePhotos, photo, paintData.flyerTemplate)
+      } else {
+        drawSpotlight(ctx, W, H, paintData, photo, collagePhotos)
+      }
+    } else if (paintData.kind === 'speaker') {
+      if (paintData.flyerTemplate && paintData.flyerTemplate !== 'classic') {
+        drawStyledFlyer(ctx, W, H, paintData, collagePhotos, photo, paintData.flyerTemplate)
+      } else {
+        drawSpeaker(ctx, W, H, paintData, photo, collagePhotos)
+      }
+    }
     else if (paintData.kind === 'open_seats') drawOpenSeats(ctx, W, H, paintData)
     else drawStatement(ctx, W, H, paintData)
   }

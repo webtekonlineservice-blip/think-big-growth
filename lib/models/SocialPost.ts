@@ -6,6 +6,7 @@ export type SocialType =
   | 'meeting_day' | 'recap' | 'evergreen' | 'photo' | 'welcome' | 'seat_open'
   | 'community_spotlight'
 export type SocialStatus = 'idea' | 'drafted' | 'scheduled' | 'posted'
+export type SocialFlyerTemplate = 'classic' | 'photo-top' | 'editorial'
 
 export const SOCIAL_TYPES: SocialType[] = [
   'meeting_promo', 'speaker', 'spotlight', 'visitor_invite', 'win', 'open_seats', 'custom',
@@ -27,7 +28,8 @@ export interface SocialGraphicSpec {
   photo_ids?: string[]
   subject_type?: 'member' | 'visitor'
   subject_id?: string
-  collage_layout?: 'grid' | 'featured' | 'freeform'
+  collage_layout?: 'grid' | 'featured' | 'freeform' | 'mosaic' | 'strip' | 'stack'
+  flyer_template?: SocialFlyerTemplate
   photo_layers?: SocialPhotoLayer[]
 }
 
